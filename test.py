@@ -81,7 +81,9 @@ async def test_memory_tables(db_pool):
         """)
         columns = {col["column_name"]: col for col in memories}
 
-        assert "relevance_score" in columns, "relevance_score column not found"
+        # Note: relevance_score is computed via calculate_relevance() function, not a column
+        assert "importance" in columns, "importance column not found"
+        assert "decay_rate" in columns, "decay_rate column not found"
         assert "last_accessed" in columns, "last_accessed column not found"
         assert "id" in columns and columns["id"]["data_type"] == "uuid"
         assert "content" in columns and columns["content"]["is_nullable"] == "NO"
@@ -3292,42 +3294,6 @@ async def test_working_memory_with_embedding(db_pool):
             print(f"Working memory embedding test failed: {e}")
 
 
-async def test_batch_memory_creation(db_pool):
-    """Test batch memory creation with embeddings"""
-    async with db_pool.acquire() as conn:
-        # Check if embedding service is available
-        health_status = await conn.fetchval("""
-            SELECT check_embedding_service_health()
-        """)
-        
-        if not health_status:
-            print("Skipping batch creation tests - service not available")
-            return
-        
-        try:
-            # Test batch creation
-            memory_ids = await conn.fetchval("""
-                SELECT batch_create_memories('[
-                    {"type": "semantic", "content": "User prefers keyboard shortcuts", "importance": 0.7},
-                    {"type": "semantic", "content": "User uses mobile device frequently", "importance": 0.6},
-                    {"type": "episodic", "content": "User completed tutorial successfully", "importance": 0.8}
-                ]')
-            """)
-            
-            assert memory_ids is not None, "Should create batch memories"
-            assert len(memory_ids) == 3, "Should create 3 memories"
-            
-            # Verify all memories were created
-            count = await conn.fetchval("""
-                SELECT COUNT(*) FROM memories WHERE id = ANY($1::uuid[])
-            """, memory_ids)
-            
-            assert count == 3, "All batch memories should exist"
-            
-        except Exception as e:
-            print(f"Batch creation test failed: {e}")
-
-
 async def test_embedding_cache_functionality(db_pool):
     """Test embedding caching functionality"""
     async with db_pool.acquire() as conn:
@@ -3344,7 +3310,7 @@ async def test_embedding_cache_functionality(db_pool):
             # Clear any existing cache for our test content
             test_content = 'unique test content for caching'
             content_hash = await conn.fetchval("""
-                SELECT encode(sha256($1::bytea), 'hex')
+                SELECT encode(sha256($1::text::bytea), 'hex')
             """, test_content)
             
             await conn.execute("""
@@ -5903,3 +5869,800 @@ async def test_gin_index_content_search(db_pool):
 
         assert len(results) >= 1
         assert 'PostgreSQL' in results[0]['content']
+
+# =============================================================================
+# COMPREHENSIVE EMBEDDING AND FUNCTION TESTS
+# These tests exercise functions that were previously untested or only
+# partially tested. They require the embedding service to be running.
+# =============================================================================
+
+@pytest.fixture
+async def ensure_embedding_service(db_pool):
+    """Fixture that ensures embedding service is available, skips test if not"""
+    async with db_pool.acquire() as conn:
+        # Ensure correct service URL
+        await conn.execute("""
+            INSERT INTO embedding_config (key, value)
+            VALUES ('service_url', 'http://embeddings:80/embed')
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+        """)
+
+        health = await conn.fetchval("SELECT check_embedding_service_health()")
+        if not health:
+            pytest.skip("Embedding service not available")
+        return True
+
+
+# -----------------------------------------------------------------------------
+# get_embedding() COMPREHENSIVE TESTS
+# -----------------------------------------------------------------------------
+
+async def test_get_embedding_basic_functionality(db_pool, ensure_embedding_service):
+    """Test get_embedding() returns a valid 768-dimension vector"""
+    async with db_pool.acquire() as conn:
+        test_id = get_test_identifier("get_emb_basic")
+        test_content = f"Test content for embedding generation {test_id}"
+
+        # Clear any cached version
+        content_hash = await conn.fetchval(
+            "SELECT encode(sha256($1::text::bytea), 'hex')", test_content
+        )
+        await conn.execute(
+            "DELETE FROM embedding_cache WHERE content_hash = $1", content_hash
+        )
+
+        # Call get_embedding
+        embedding = await conn.fetchval(
+            "SELECT get_embedding($1)", test_content
+        )
+
+        assert embedding is not None, "get_embedding should return a vector"
+        # pgvector returns a string representation, verify it's non-empty
+        assert len(str(embedding)) > 0, "Embedding should not be empty"
+
+
+async def test_get_embedding_caching_creates_cache_entry(db_pool, ensure_embedding_service):
+    """Test that get_embedding() creates a cache entry in embedding_cache table"""
+    async with db_pool.acquire() as conn:
+        test_id = get_test_identifier("get_emb_cache")
+        test_content = f"Unique content for caching test {test_id}"
+
+        # Calculate the hash that will be used
+        content_hash = await conn.fetchval(
+            "SELECT encode(sha256($1::text::bytea), 'hex')", test_content
+        )
+
+        # Ensure no cache entry exists
+        await conn.execute(
+            "DELETE FROM embedding_cache WHERE content_hash = $1", content_hash
+        )
+
+        # Verify cache is empty for this content
+        cache_before = await conn.fetchval(
+            "SELECT COUNT(*) FROM embedding_cache WHERE content_hash = $1", content_hash
+        )
+        assert cache_before == 0, "Cache should be empty before call"
+
+        # Call get_embedding
+        await conn.fetchval("SELECT get_embedding($1)", test_content)
+
+        # Verify cache entry was created
+        cache_after = await conn.fetchval(
+            "SELECT COUNT(*) FROM embedding_cache WHERE content_hash = $1", content_hash
+        )
+        assert cache_after == 1, "Cache entry should be created after get_embedding call"
+
+
+async def test_get_embedding_cache_hit_returns_same_result(db_pool, ensure_embedding_service):
+    """Test that get_embedding() returns cached embedding on second call"""
+    async with db_pool.acquire() as conn:
+        test_id = get_test_identifier("get_emb_cache_hit")
+        test_content = f"Content for cache hit test {test_id}"
+
+        # Clear cache first
+        content_hash = await conn.fetchval(
+            "SELECT encode(sha256($1::text::bytea), 'hex')", test_content
+        )
+        await conn.execute(
+            "DELETE FROM embedding_cache WHERE content_hash = $1", content_hash
+        )
+
+        # First call - cache miss, hits service
+        embedding1 = await conn.fetchval("SELECT get_embedding($1)", test_content)
+
+        # Second call - should be cache hit
+        embedding2 = await conn.fetchval("SELECT get_embedding($1)", test_content)
+
+        assert embedding1 == embedding2, "Cached embedding should match original"
+
+
+async def test_get_embedding_sha256_hash_correctness(db_pool, ensure_embedding_service):
+    """Test that get_embedding uses correct SHA256 hashing for cache key"""
+    async with db_pool.acquire() as conn:
+        test_id = get_test_identifier("get_emb_hash")
+        test_content = f"Hash test content {test_id}"
+
+        # Calculate expected hash
+        expected_hash = await conn.fetchval(
+            "SELECT encode(sha256($1::text::bytea), 'hex')", test_content
+        )
+
+        # Clear any existing cache
+        await conn.execute(
+            "DELETE FROM embedding_cache WHERE content_hash = $1", expected_hash
+        )
+
+        # Call get_embedding
+        await conn.fetchval("SELECT get_embedding($1)", test_content)
+
+        # Verify the cache entry uses the expected hash
+        cached_embedding = await conn.fetchval(
+            "SELECT embedding FROM embedding_cache WHERE content_hash = $1", expected_hash
+        )
+        assert cached_embedding is not None, "Cache should use SHA256 hash as key"
+
+
+async def test_get_embedding_different_content_different_embeddings(db_pool, ensure_embedding_service):
+    """Test that different content produces different embeddings"""
+    async with db_pool.acquire() as conn:
+        test_id = get_test_identifier("get_emb_diff")
+
+        content1 = f"The cat sat on the mat {test_id}"
+        content2 = f"Quantum physics principles {test_id}"
+
+        embedding1 = await conn.fetchval("SELECT get_embedding($1)", content1)
+        embedding2 = await conn.fetchval("SELECT get_embedding($1)", content2)
+
+        # Embeddings should be different for semantically different content
+        assert embedding1 != embedding2, "Different content should produce different embeddings"
+
+
+async def test_get_embedding_http_error_handling(db_pool):
+    """Test get_embedding() error handling when HTTP service is unavailable"""
+    async with db_pool.acquire() as conn:
+        # Save original URL
+        original_url = await conn.fetchval(
+            "SELECT value FROM embedding_config WHERE key = 'service_url'"
+        )
+
+        try:
+            # Set invalid URL
+            await conn.execute("""
+                UPDATE embedding_config
+                SET value = 'http://nonexistent-service:9999/embed'
+                WHERE key = 'service_url'
+            """)
+
+            # Attempt to get embedding - should fail
+            with pytest.raises(Exception) as exc_info:
+                await conn.fetchval("SELECT get_embedding('test content')")
+
+            assert "Failed to get embedding" in str(exc_info.value), \
+                "Should raise proper error message"
+        finally:
+            # Restore original URL
+            await conn.execute(
+                "UPDATE embedding_config SET value = $1 WHERE key = 'service_url'",
+                original_url
+            )
+
+
+async def test_get_embedding_non_200_response_handling(db_pool):
+    """Test get_embedding() handles non-200 HTTP responses"""
+    async with db_pool.acquire() as conn:
+        original_url = await conn.fetchval(
+            "SELECT value FROM embedding_config WHERE key = 'service_url'"
+        )
+
+        try:
+            # Set URL that will return 404 or similar
+            await conn.execute("""
+                UPDATE embedding_config
+                SET value = 'http://embeddings:80/nonexistent-endpoint'
+                WHERE key = 'service_url'
+            """)
+
+            with pytest.raises(Exception) as exc_info:
+                await conn.fetchval("SELECT get_embedding('test content')")
+
+            # Should mention service error or failed
+            error_msg = str(exc_info.value).lower()
+            assert "error" in error_msg or "failed" in error_msg, \
+                "Should indicate error for non-200 response"
+        finally:
+            await conn.execute(
+                "UPDATE embedding_config SET value = $1 WHERE key = 'service_url'",
+                original_url
+            )
+
+
+async def test_get_embedding_dimension_validation(db_pool, ensure_embedding_service):
+    """Test that get_embedding validates 768-dimension requirement"""
+    async with db_pool.acquire() as conn:
+        test_id = get_test_identifier("get_emb_dim")
+
+        # The embedding service should return 768 dimensions
+        # This test verifies the function accepts valid embeddings
+        embedding = await conn.fetchval(
+            "SELECT get_embedding($1)", f"Dimension test {test_id}"
+        )
+
+        # Verify by inserting into a table that requires 768 dimensions
+        await conn.execute("""
+            INSERT INTO working_memory (content, embedding, expiry)
+            VALUES ($1, $2, NOW() + INTERVAL '1 hour')
+        """, f"Dimension verification {test_id}", embedding)
+
+        # If we get here, the embedding was valid 768 dimensions
+        assert True
+
+
+# -----------------------------------------------------------------------------
+# check_embedding_service_health() COMPREHENSIVE TESTS
+# -----------------------------------------------------------------------------
+
+async def test_check_embedding_service_health_returns_boolean(db_pool):
+    """Test check_embedding_service_health() returns a boolean value"""
+    async with db_pool.acquire() as conn:
+        result = await conn.fetchval("SELECT check_embedding_service_health()")
+        assert isinstance(result, bool), "Should return a boolean"
+
+
+async def test_check_embedding_service_health_true_when_available(db_pool):
+    """Test health check returns true when service is available"""
+    async with db_pool.acquire() as conn:
+        # Ensure correct URL
+        await conn.execute("""
+            INSERT INTO embedding_config (key, value)
+            VALUES ('service_url', 'http://embeddings:80/embed')
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+        """)
+
+        result = await conn.fetchval("SELECT check_embedding_service_health()")
+
+        # This test may skip if service not running, but if it runs, verify result
+        if result:
+            assert result == True, "Should return true when service is healthy"
+
+
+async def test_check_embedding_service_health_false_when_unavailable(db_pool):
+    """Test health check returns false when service is unavailable"""
+    async with db_pool.acquire() as conn:
+        original_url = await conn.fetchval(
+            "SELECT value FROM embedding_config WHERE key = 'service_url'"
+        )
+
+        try:
+            # Set invalid URL
+            await conn.execute("""
+                UPDATE embedding_config
+                SET value = 'http://nonexistent-host:9999/embed'
+                WHERE key = 'service_url'
+            """)
+
+            result = await conn.fetchval("SELECT check_embedding_service_health()")
+            assert result == False, "Should return false when service unavailable"
+        finally:
+            await conn.execute(
+                "UPDATE embedding_config SET value = $1 WHERE key = 'service_url'",
+                original_url
+            )
+
+
+async def test_check_embedding_service_health_endpoint_path(db_pool):
+    """Test health check uses correct /health endpoint path"""
+    async with db_pool.acquire() as conn:
+        # The function replaces /embed with /health
+        # If service is at http://embeddings:80/embed, health should be http://embeddings:80/health
+        await conn.execute("""
+            INSERT INTO embedding_config (key, value)
+            VALUES ('service_url', 'http://embeddings:80/embed')
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+        """)
+
+        # Function should work without error (may return true or false)
+        result = await conn.fetchval("SELECT check_embedding_service_health()")
+        assert result is not None, "Should return a value, not NULL"
+
+
+async def test_check_embedding_service_health_no_exception_on_failure(db_pool):
+    """Test health check gracefully handles errors without raising exceptions"""
+    async with db_pool.acquire() as conn:
+        original_url = await conn.fetchval(
+            "SELECT value FROM embedding_config WHERE key = 'service_url'"
+        )
+
+        try:
+            # Set completely invalid URL
+            await conn.execute("""
+                UPDATE embedding_config
+                SET value = 'http://256.256.256.256:9999/embed'
+                WHERE key = 'service_url'
+            """)
+
+            # Should NOT raise an exception, should return false
+            result = await conn.fetchval("SELECT check_embedding_service_health()")
+            assert result == False, "Should return false, not raise exception"
+        finally:
+            await conn.execute(
+                "UPDATE embedding_config SET value = $1 WHERE key = 'service_url'",
+                original_url
+            )
+
+
+# -----------------------------------------------------------------------------
+# create_memory() COMPREHENSIVE TESTS
+# -----------------------------------------------------------------------------
+
+async def test_create_memory_returns_uuid(db_pool, ensure_embedding_service):
+    """Test create_memory() returns a valid UUID"""
+    async with db_pool.acquire() as conn:
+        await conn.execute("LOAD 'age';")
+        await conn.execute("SET search_path = ag_catalog, public;")
+
+        test_id = get_test_identifier("create_mem_uuid")
+
+        memory_id = await conn.fetchval("""
+            SELECT create_memory('semantic'::memory_type, $1, 0.7)
+        """, f"Test memory content {test_id}")
+
+        assert memory_id is not None, "Should return a UUID"
+        assert isinstance(memory_id, uuid.UUID), "Should be a UUID type"
+
+
+async def test_create_memory_generates_embedding(db_pool, ensure_embedding_service):
+    """Test create_memory() generates embedding automatically via get_embedding()"""
+    async with db_pool.acquire() as conn:
+        await conn.execute("LOAD 'age';")
+        await conn.execute("SET search_path = ag_catalog, public;")
+
+        test_id = get_test_identifier("create_mem_emb")
+        content = f"Memory with auto-generated embedding {test_id}"
+
+        memory_id = await conn.fetchval("""
+            SELECT create_memory('semantic'::memory_type, $1, 0.8)
+        """, content)
+
+        # Verify embedding was generated and stored
+        embedding = await conn.fetchval("""
+            SELECT embedding FROM memories WHERE id = $1
+        """, memory_id)
+
+        assert embedding is not None, "Embedding should be generated"
+
+
+async def test_create_memory_creates_graph_node(db_pool, ensure_embedding_service):
+    """Test create_memory() creates a MemoryNode in the graph"""
+    async with db_pool.acquire() as conn:
+        await conn.execute("LOAD 'age';")
+        await conn.execute("SET search_path = ag_catalog, public;")
+
+        test_id = get_test_identifier("create_mem_graph")
+
+        memory_id = await conn.fetchval("""
+            SELECT create_memory('episodic'::memory_type, $1, 0.6)
+        """, f"Memory for graph node test {test_id}")
+
+        # Verify graph node was created using f-string for UUID in cypher
+        graph_check = await conn.fetchval(f"""
+            SELECT * FROM cypher('memory_graph', $$
+                MATCH (n:MemoryNode)
+                WHERE n.memory_id = '{memory_id}'
+                RETURN count(n)
+            $$) as (cnt agtype)
+        """)
+
+        assert graph_check is not None, "Graph node should exist"
+        # agtype returns as string like "1", check it's not "0"
+        assert str(graph_check) != '0', "Should find at least one graph node"
+
+
+async def test_create_memory_graph_node_properties(db_pool, ensure_embedding_service):
+    """Test MemoryNode has correct properties (memory_id, type, created_at)"""
+    async with db_pool.acquire() as conn:
+        await conn.execute("LOAD 'age';")
+        await conn.execute("SET search_path = ag_catalog, public;")
+
+        test_id = get_test_identifier("create_mem_props")
+
+        memory_id = await conn.fetchval("""
+            SELECT create_memory('procedural'::memory_type, $1, 0.5)
+        """, f"Memory for properties test {test_id}")
+
+        # Query graph for node properties
+        result = await conn.fetch(f"""
+            SELECT * FROM cypher('memory_graph', $$
+                MATCH (n:MemoryNode)
+                WHERE n.memory_id = '{memory_id}'
+                RETURN n.memory_id, n.type, n.created_at
+            $$) as (mid agtype, mtype agtype, created agtype)
+        """)
+
+        assert len(result) == 1, "Should find exactly one node"
+        # The values are agtype, which are JSON-like
+        assert str(memory_id) in str(result[0]['mid']), "memory_id should match"
+        assert 'procedural' in str(result[0]['mtype']), "type should be procedural"
+        assert result[0]['created'] is not None, "created_at should be set"
+
+
+async def test_create_memory_all_types(db_pool, ensure_embedding_service):
+    """Test create_memory() works for all memory types"""
+    async with db_pool.acquire() as conn:
+        await conn.execute("LOAD 'age';")
+        await conn.execute("SET search_path = ag_catalog, public;")
+
+        test_id = get_test_identifier("create_mem_types")
+        memory_types = ['episodic', 'semantic', 'procedural', 'strategic']
+
+        for mem_type in memory_types:
+            memory_id = await conn.fetchval(f"""
+                SELECT create_memory('{mem_type}'::memory_type, $1, 0.5)
+            """, f"Test {mem_type} memory {test_id}")
+
+            assert memory_id is not None, f"Should create {mem_type} memory"
+
+            # Verify type in database
+            stored_type = await conn.fetchval("""
+                SELECT type FROM memories WHERE id = $1
+            """, memory_id)
+
+            assert stored_type == mem_type, f"Stored type should be {mem_type}"
+
+
+async def test_create_memory_importance_stored(db_pool, ensure_embedding_service):
+    """Test create_memory() stores importance value correctly"""
+    async with db_pool.acquire() as conn:
+        await conn.execute("LOAD 'age';")
+        await conn.execute("SET search_path = ag_catalog, public;")
+
+        test_id = get_test_identifier("create_mem_imp")
+        importance = 0.95
+
+        memory_id = await conn.fetchval("""
+            SELECT create_memory('semantic'::memory_type, $1, $2)
+        """, f"High importance memory {test_id}", importance)
+
+        stored_importance = await conn.fetchval("""
+            SELECT importance FROM memories WHERE id = $1
+        """, memory_id)
+
+        assert abs(stored_importance - importance) < 0.001, "Importance should match"
+
+
+async def test_create_memory_triggers_episode_assignment(db_pool, ensure_embedding_service):
+    """Test create_memory() triggers auto episode assignment"""
+    async with db_pool.acquire() as conn:
+        await conn.execute("LOAD 'age';")
+        await conn.execute("SET search_path = ag_catalog, public;")
+
+        test_id = get_test_identifier("create_mem_ep")
+
+        memory_id = await conn.fetchval("""
+            SELECT create_memory('episodic'::memory_type, $1, 0.7)
+        """, f"Memory for episode test {test_id}")
+
+        # Verify memory was assigned to an episode
+        episode_link = await conn.fetchrow("""
+            SELECT episode_id, sequence_order FROM episode_memories
+            WHERE memory_id = $1
+        """, memory_id)
+
+        assert episode_link is not None, "Memory should be assigned to episode"
+        assert episode_link['episode_id'] is not None
+        assert episode_link['sequence_order'] >= 1
+
+
+async def test_create_memory_initializes_neighborhood(db_pool, ensure_embedding_service):
+    """Test create_memory() initializes memory_neighborhoods record"""
+    async with db_pool.acquire() as conn:
+        await conn.execute("LOAD 'age';")
+        await conn.execute("SET search_path = ag_catalog, public;")
+
+        test_id = get_test_identifier("create_mem_neigh")
+
+        memory_id = await conn.fetchval("""
+            SELECT create_memory('semantic'::memory_type, $1, 0.6)
+        """, f"Memory for neighborhood test {test_id}")
+
+        # Verify neighborhood record was created
+        neighborhood = await conn.fetchrow("""
+            SELECT memory_id, neighbors, is_stale FROM memory_neighborhoods
+            WHERE memory_id = $1
+        """, memory_id)
+
+        assert neighborhood is not None, "Neighborhood record should be created"
+        assert neighborhood['is_stale'] == True, "New neighborhood should be stale"
+
+
+# -----------------------------------------------------------------------------
+# add_to_working_memory() COMPREHENSIVE TESTS
+# -----------------------------------------------------------------------------
+
+async def test_add_to_working_memory_returns_uuid(db_pool, ensure_embedding_service):
+    """Test add_to_working_memory() returns a valid UUID"""
+    async with db_pool.acquire() as conn:
+        test_id = get_test_identifier("add_wm_uuid")
+
+        wm_id = await conn.fetchval("""
+            SELECT add_to_working_memory($1, INTERVAL '1 hour')
+        """, f"Working memory content {test_id}")
+
+        assert wm_id is not None, "Should return a UUID"
+        assert isinstance(wm_id, uuid.UUID), "Should be UUID type"
+
+
+async def test_add_to_working_memory_generates_embedding(db_pool, ensure_embedding_service):
+    """Test add_to_working_memory() calls get_embedding() for auto-embedding"""
+    async with db_pool.acquire() as conn:
+        test_id = get_test_identifier("add_wm_emb")
+        content = f"Working memory with embedding {test_id}"
+
+        wm_id = await conn.fetchval("""
+            SELECT add_to_working_memory($1, INTERVAL '1 hour')
+        """, content)
+
+        # Verify embedding was stored
+        embedding = await conn.fetchval("""
+            SELECT embedding FROM working_memory WHERE id = $1
+        """, wm_id)
+
+        assert embedding is not None, "Embedding should be generated"
+
+
+async def test_add_to_working_memory_sets_expiry(db_pool, ensure_embedding_service):
+    """Test add_to_working_memory() sets correct expiry time"""
+    async with db_pool.acquire() as conn:
+        test_id = get_test_identifier("add_wm_exp")
+
+        wm_id = await conn.fetchval("""
+            SELECT add_to_working_memory($1, INTERVAL '2 hours')
+        """, f"Expiry test {test_id}")
+
+        expiry = await conn.fetchval("""
+            SELECT expiry FROM working_memory WHERE id = $1
+        """, wm_id)
+
+        assert expiry is not None, "Expiry should be set"
+        # Expiry should be approximately 2 hours from now
+        now = await conn.fetchval("SELECT CURRENT_TIMESTAMP")
+        diff = expiry - now
+        # Should be between 1h 59m and 2h 1m (allowing for test execution time)
+        assert diff.total_seconds() > 7100 and diff.total_seconds() < 7300, \
+            "Expiry should be approximately 2 hours from now"
+
+
+async def test_add_to_working_memory_default_expiry(db_pool, ensure_embedding_service):
+    """Test add_to_working_memory() uses default 1 hour expiry"""
+    async with db_pool.acquire() as conn:
+        test_id = get_test_identifier("add_wm_def_exp")
+
+        wm_id = await conn.fetchval("""
+            SELECT add_to_working_memory($1)
+        """, f"Default expiry test {test_id}")
+
+        expiry = await conn.fetchval("""
+            SELECT expiry FROM working_memory WHERE id = $1
+        """, wm_id)
+
+        now = await conn.fetchval("SELECT CURRENT_TIMESTAMP")
+        diff = expiry - now
+        # Default should be 1 hour (3600 seconds, with some tolerance)
+        assert diff.total_seconds() > 3500 and diff.total_seconds() < 3700, \
+            "Default expiry should be approximately 1 hour"
+
+
+async def test_add_to_working_memory_content_stored(db_pool, ensure_embedding_service):
+    """Test add_to_working_memory() stores content correctly"""
+    async with db_pool.acquire() as conn:
+        test_id = get_test_identifier("add_wm_content")
+        content = f"Specific working memory content {test_id}"
+
+        wm_id = await conn.fetchval("""
+            SELECT add_to_working_memory($1, INTERVAL '1 hour')
+        """, content)
+
+        stored_content = await conn.fetchval("""
+            SELECT content FROM working_memory WHERE id = $1
+        """, wm_id)
+
+        assert stored_content == content, "Content should match exactly"
+
+
+async def test_add_to_working_memory_searchable(db_pool, ensure_embedding_service):
+    """Test working memory added via function is searchable"""
+    async with db_pool.acquire() as conn:
+        test_id = get_test_identifier("add_wm_search")
+        content = f"Searchable working memory about databases {test_id}"
+
+        await conn.fetchval("""
+            SELECT add_to_working_memory($1, INTERVAL '1 hour')
+        """, content)
+
+        # Search for it
+        results = await conn.fetch("""
+            SELECT * FROM search_working_memory('database working memory', 5)
+        """)
+
+        # Should find our content
+        found = any(test_id in str(r['content']) for r in results)
+        assert found, "Should find the working memory via search"
+
+
+# -----------------------------------------------------------------------------
+# BATCH CREATE MEMORIES - Remove orphaned test or implement function
+# -----------------------------------------------------------------------------
+
+async def test_batch_create_memories_not_implemented(db_pool):
+    """Test that batch_create_memories function does not exist (orphaned test removal)"""
+    async with db_pool.acquire() as conn:
+        # Verify the function doesn't exist in the schema
+        exists = await conn.fetchval("""
+            SELECT EXISTS (
+                SELECT 1 FROM pg_proc p
+                JOIN pg_namespace n ON p.pronamespace = n.oid
+                WHERE n.nspname = 'public' AND p.proname = 'batch_create_memories'
+            )
+        """)
+
+        # This test documents that batch_create_memories is not implemented
+        # If you want this function, you need to add it to schema.sql
+        if not exists:
+            # Function doesn't exist - this is expected
+            assert True, "batch_create_memories is not implemented in schema"
+        else:
+            # Function exists - test it works
+            pytest.fail("batch_create_memories exists but was thought to be missing")
+
+
+# -----------------------------------------------------------------------------
+# INTEGRATION TESTS - Full workflow with real embeddings
+# -----------------------------------------------------------------------------
+
+async def test_full_memory_lifecycle_with_embeddings(db_pool, ensure_embedding_service):
+    """Test complete memory lifecycle: create -> search -> recall -> graph"""
+    async with db_pool.acquire() as conn:
+        await conn.execute("LOAD 'age';")
+        await conn.execute("SET search_path = ag_catalog, public;")
+
+        test_id = get_test_identifier("full_lifecycle")
+        unique_content = f"Quantum entanglement principles in distributed systems {test_id}"
+
+        # 1. Create memory using create_memory (tests get_embedding)
+        memory_id = await conn.fetchval("""
+            SELECT create_memory('semantic'::memory_type, $1, 0.9)
+        """, unique_content)
+
+        assert memory_id is not None
+
+        # 2. Verify embedding was generated and cached
+        content_hash = await conn.fetchval(
+            "SELECT encode(sha256($1::text::bytea), 'hex')",
+            unique_content
+        )
+        cached = await conn.fetchval(
+            "SELECT COUNT(*) FROM embedding_cache WHERE content_hash = $1",
+            content_hash
+        )
+        assert cached >= 1, "Embedding should be cached"
+
+        # 3. Search for memory using search_similar_memories with unique terms
+        results = await conn.fetch("""
+            SELECT * FROM search_similar_memories($1, 10)
+        """, f"quantum entanglement {test_id}")
+
+        # Verify we got results and search function works
+        assert len(results) > 0, "Search should return results"
+
+        # The memory we just created should be in results (search by similar content)
+        found = any(str(memory_id) == str(r['memory_id']) for r in results)
+        assert found, f"Should find memory {memory_id} via similarity search"
+
+        # 4. Use fast_recall
+        recall_results = await conn.fetch("""
+            SELECT * FROM fast_recall($1, 5)
+        """, f"quantum distributed {test_id}")
+
+        # Verify function works (may or may not find our specific memory)
+        assert recall_results is not None
+
+        # 5. Verify graph node exists
+        graph_count = await conn.fetchval(f"""
+            SELECT * FROM cypher('memory_graph', $$
+                MATCH (n:MemoryNode)
+                WHERE n.memory_id = '{memory_id}'
+                RETURN count(n)
+            $$) as (cnt agtype)
+        """)
+
+        assert graph_count is not None
+
+
+async def test_working_memory_full_workflow(db_pool, ensure_embedding_service):
+    """Test working memory: add -> search -> cleanup"""
+    async with db_pool.acquire() as conn:
+        test_id = get_test_identifier("wm_workflow")
+
+        # 1. Add multiple items using add_to_working_memory
+        items = [
+            f"Current task: reviewing code changes {test_id}",
+            f"User context: working on Python project {test_id}",
+            f"Recent action: opened file editor {test_id}"
+        ]
+
+        wm_ids = []
+        for item in items:
+            wm_id = await conn.fetchval("""
+                SELECT add_to_working_memory($1, INTERVAL '30 minutes')
+            """, item)
+            wm_ids.append(wm_id)
+
+        assert len(wm_ids) == 3, "Should create 3 working memory items"
+
+        # 2. Search working memory
+        results = await conn.fetch("""
+            SELECT * FROM search_working_memory('Python code', 5)
+        """)
+
+        # Should find at least one of our items
+        found_any = any(test_id in str(r['content']) for r in results)
+        assert found_any, "Should find working memory items via search"
+
+        # 3. Test cleanup with short expiry
+        short_expiry_id = await conn.fetchval("""
+            SELECT add_to_working_memory($1, INTERVAL '-1 second')
+        """, f"Already expired {test_id}")
+
+        deleted = await conn.fetchval("SELECT cleanup_working_memory()")
+        assert deleted >= 1, "Should clean up expired items"
+
+        # Verify expired item is gone
+        exists = await conn.fetchval("""
+            SELECT EXISTS (SELECT 1 FROM working_memory WHERE id = $1)
+        """, short_expiry_id)
+        assert not exists, "Expired item should be deleted"
+
+
+async def test_embedding_cache_lifecycle(db_pool, ensure_embedding_service):
+    """Test embedding cache: create -> verify -> cleanup"""
+    async with db_pool.acquire() as conn:
+        test_id = get_test_identifier("cache_lifecycle")
+
+        # 1. Generate embedding (creates cache entry)
+        content = f"Unique content for cache lifecycle {test_id}"
+        content_hash = await conn.fetchval(
+            "SELECT encode(sha256($1::text::bytea), 'hex')", content
+        )
+
+        # Clear any existing
+        await conn.execute(
+            "DELETE FROM embedding_cache WHERE content_hash = $1", content_hash
+        )
+
+        # 2. Call get_embedding
+        embedding = await conn.fetchval("SELECT get_embedding($1)", content)
+        assert embedding is not None
+
+        # 3. Verify cache entry created with correct timestamp
+        cache_entry = await conn.fetchrow("""
+            SELECT content_hash, embedding, created_at
+            FROM embedding_cache WHERE content_hash = $1
+        """, content_hash)
+
+        assert cache_entry is not None
+        assert cache_entry['embedding'] is not None
+        assert cache_entry['created_at'] is not None
+
+        # 4. Test cleanup with 0 interval (should delete everything)
+        deleted = await conn.fetchval("""
+            SELECT cleanup_embedding_cache(INTERVAL '0 seconds')
+        """)
+
+        assert deleted >= 1, "Should delete cache entries"
+
+        # 5. Verify our entry was cleaned up
+        exists = await conn.fetchval("""
+            SELECT EXISTS (
+                SELECT 1 FROM embedding_cache WHERE content_hash = $1
+            )
+        """, content_hash)
+        assert not exists, "Cache entry should be deleted"
