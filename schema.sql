@@ -27,7 +27,7 @@ CREATE TABLE working_memory (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     content TEXT NOT NULL,
-    embedding vector(1536) NOT NULL,
+    embedding vector(768) NOT NULL,
     expiry TIMESTAMPTZ
 );
 
@@ -48,7 +48,7 @@ CREATE TABLE memories (
     type memory_type NOT NULL,
     status memory_status DEFAULT 'active',
     content TEXT NOT NULL,
-    embedding vector(1536) NOT NULL,
+    embedding vector(768) NOT NULL,
     importance FLOAT DEFAULT 0.0,
     access_count INTEGER DEFAULT 0,
     last_accessed TIMESTAMPTZ,
@@ -66,7 +66,7 @@ CREATE TABLE memory_clusters (
     cluster_type cluster_type NOT NULL,
     name TEXT NOT NULL,
     description TEXT,
-    centroid_embedding vector(1536), -- Average embedding of all memories in cluster
+    centroid_embedding vector(768), -- Average embedding of all memories in cluster
     emotional_signature JSONB, -- Common emotional patterns
     keywords TEXT[], -- Key terms associated with this cluster
     importance_score FLOAT DEFAULT 0.0,
@@ -219,11 +219,11 @@ CREATE TABLE memory_changes (
 );
 
 -- Indexes for performance
-CREATE INDEX ON memories USING ivfflat (embedding vector_cosine_ops);
+CREATE INDEX ON memories USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX ON memories (status);
 CREATE INDEX ON memories USING GIN (content gin_trgm_ops);
 CREATE INDEX ON memories (relevance_score DESC) WHERE status = 'active';
-CREATE INDEX ON memory_clusters USING ivfflat (centroid_embedding vector_cosine_ops);
+CREATE INDEX ON memory_clusters USING hnsw (centroid_embedding vector_cosine_ops);
 CREATE INDEX ON memory_clusters (cluster_type, importance_score DESC);
 CREATE INDEX ON memory_clusters (last_activated DESC);
 CREATE INDEX ON memory_cluster_members (memory_id);
@@ -269,10 +269,10 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION recalculate_cluster_centroid(cluster_uuid UUID)
 RETURNS VOID AS $$
 DECLARE
-    new_centroid vector(1536);
+    new_centroid vector(768);
 BEGIN
     -- Calculate average embedding of all active memories in cluster
-    SELECT AVG(m.embedding)::vector(1536)
+    SELECT AVG(m.embedding)::vector(768)
     INTO new_centroid
     FROM memories m
     JOIN memory_cluster_members mcm ON m.id = mcm.memory_id
@@ -291,12 +291,12 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION assign_memory_to_clusters(memory_uuid UUID, max_clusters INT DEFAULT 3)
 RETURNS VOID AS $$
 DECLARE
-    memory_embedding vector(1536);
+    memory_embedding vector(768);
     memory_content TEXT;
     cluster_record RECORD;
     similarity_threshold FLOAT := 0.7;
     assigned_count INT := 0;
-    zero_vector vector(1536) := array_fill(0::float, ARRAY[1536])::vector;
+    zero_vector vector(768) := array_fill(0::float, ARRAY[768])::vector;
 BEGIN
     -- Get memory details
     SELECT embedding, content INTO memory_embedding, memory_content
@@ -432,7 +432,7 @@ ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 -- Embedding cache table for performance
 CREATE TABLE IF NOT EXISTS embedding_cache (
     content_hash TEXT PRIMARY KEY,
-    embedding vector(1536) NOT NULL,
+    embedding vector(768) NOT NULL,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -441,7 +441,7 @@ CREATE INDEX ON embedding_cache (created_at);
 
 -- Core function to get embeddings from the service
 CREATE OR REPLACE FUNCTION get_embedding(text_content TEXT) 
-RETURNS vector(1536) AS $$
+RETURNS vector(768) AS $$
 DECLARE
     service_url TEXT;
     response http_response;
@@ -449,15 +449,15 @@ DECLARE
     embedding_array FLOAT[];
     embedding_json JSONB;
     content_hash TEXT;
-    cached_embedding vector(1536);
+    cached_embedding vector(768);
 BEGIN
     -- Generate hash for caching
     content_hash := encode(sha256(text_content::bytea), 'hex');
     
     -- Check cache first
-    SELECT embedding INTO cached_embedding 
-    FROM embedding_cache 
-    WHERE content_hash = content_hash;
+    SELECT ec.embedding INTO cached_embedding
+    FROM embedding_cache ec
+    WHERE ec.content_hash = get_embedding.content_hash;
     
     IF FOUND THEN
         RETURN cached_embedding;
@@ -508,16 +508,16 @@ BEGIN
     END IF;
     
     -- Validate embedding size
-    IF array_length(embedding_array, 1) != 1536 THEN
-        RAISE EXCEPTION 'Invalid embedding dimension: expected 1536, got %', array_length(embedding_array, 1);
+    IF array_length(embedding_array, 1) != 768 THEN
+        RAISE EXCEPTION 'Invalid embedding dimension: expected 768, got %', array_length(embedding_array, 1);
     END IF;
     
     -- Cache the result
     INSERT INTO embedding_cache (content_hash, embedding)
-    VALUES (content_hash, embedding_array::vector(1536))
+    VALUES (content_hash, embedding_array::vector(768))
     ON CONFLICT DO NOTHING;
     
-    RETURN embedding_array::vector(1536);
+    RETURN embedding_array::vector(768);
 EXCEPTION
     WHEN OTHERS THEN
         RAISE EXCEPTION 'Failed to get embedding: %', SQLERRM;
@@ -532,7 +532,7 @@ CREATE OR REPLACE FUNCTION create_memory(
 ) RETURNS UUID AS $$
 DECLARE
     memory_id UUID;
-    embedding_vec vector(1536);
+    embedding_vec vector(768);
 BEGIN
     -- Generate embedding
     embedding_vec := get_embedding(p_content);
@@ -676,7 +676,7 @@ CREATE OR REPLACE FUNCTION add_to_working_memory(
 ) RETURNS UUID AS $$
 DECLARE
     memory_id UUID;
-    embedding_vec vector(1536);
+    embedding_vec vector(768);
 BEGIN
     -- Generate embedding
     embedding_vec := get_embedding(p_content);
@@ -705,7 +705,7 @@ CREATE OR REPLACE FUNCTION search_similar_memories(
     importance FLOAT
 ) AS $$
 DECLARE
-    query_embedding vector(1536);
+    query_embedding vector(768);
 BEGIN
     -- Generate embedding for query
     query_embedding := get_embedding(p_query_text);
@@ -739,7 +739,7 @@ CREATE OR REPLACE FUNCTION search_working_memory(
     created_at TIMESTAMPTZ
 ) AS $$
 DECLARE
-    query_embedding vector(1536);
+    query_embedding vector(768);
 BEGIN
     -- Generate embedding for query
     query_embedding := get_embedding(p_query_text);
@@ -769,14 +769,14 @@ CREATE OR REPLACE FUNCTION create_memory_cluster(
 ) RETURNS UUID AS $$
 DECLARE
     cluster_id UUID;
-    centroid_vec vector(1536);
-    memory_embeddings vector(1536)[];
+    centroid_vec vector(768);
+    memory_embeddings vector(768)[];
     i INT;
 BEGIN
     -- If initial memories provided, calculate centroid
     IF p_initial_memories IS NOT NULL AND array_length(p_initial_memories, 1) > 0 THEN
         -- Calculate average (simplified - in production, use proper vector averaging)
-        SELECT AVG(embedding)::vector(1536) INTO centroid_vec
+        SELECT AVG(embedding)::vector(768) INTO centroid_vec
         FROM memories
         WHERE id = ANY(p_initial_memories)
         AND status = 'active';
