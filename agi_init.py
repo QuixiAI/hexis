@@ -192,7 +192,7 @@ async def _run_init(dsn: str, *, wait_seconds: int) -> int:
 
         print("\nModel configuration (stored in DB; worker will also use env vars for keys).")
         hb_provider = _prompt(
-            "Heartbeat model provider (openai|anthropic|openai_compatible|ollama)",
+            "Heartbeat model provider (openai|anthropic|openai_compatible|ollama|openrouter)",
             default=os.getenv("LLM_PROVIDER", "openai"),
             required=True,
         )
@@ -204,12 +204,12 @@ async def _run_init(dsn: str, *, wait_seconds: int) -> int:
         )
         hb_key_env = _prompt(
             "Heartbeat API key env var name (e.g. OPENAI_API_KEY; blank for none)",
-            default="OPENAI_API_KEY" if hb_provider.startswith("openai") else "",
+            default="OPENROUTER_API_KEY" if hb_provider == "openrouter" else ("OPENAI_API_KEY" if hb_provider.startswith("openai") else ""),
             required=False,
         )
 
         chat_provider = _prompt(
-            "Chat model provider (openai|anthropic|openai_compatible|ollama)",
+            "Chat model provider (openai|anthropic|openai_compatible|ollama|openrouter)",
             default=hb_provider,
             required=True,
         )

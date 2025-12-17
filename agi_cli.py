@@ -258,7 +258,7 @@ async def _config_validate(dsn: str, *, wait_seconds: int) -> tuple[list[str], l
                 warnings.append(f"{name}.model is empty (will rely on worker defaults)")
 
             # Keys are provided via environment variables; DB stores the env var name.
-            if provider in {"openai", "anthropic", "openai_compatible"}:
+            if provider in {"openai", "anthropic", "openai_compatible", "openrouter"}:
                 if api_key_env:
                     if os.getenv(api_key_env) is None:
                         errors.append(f"{name}.api_key_env={api_key_env} is not set in environment")

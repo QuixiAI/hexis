@@ -25,6 +25,12 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "requests", "--break-system-packages", "-q"])
     import requests
 
+try:
+    from openrouter import OpenRouter
+    HAS_OPENROUTER = True
+except ImportError:
+    HAS_OPENROUTER = False
+
 from memory_tools import (
     get_tool_definitions,
     create_tool_handler,
@@ -45,6 +51,7 @@ class ConversationConfig:
     llm_endpoint: str = "http://localhost:11434/v1"
     llm_model: str = "llama3.2"
     llm_api_key: str = "not-needed"
+    llm_provider: str = "openai"
     
     # Database Settings
     db_host: str = "localhost"
@@ -129,7 +136,16 @@ class LLMClient:
     def __init__(self, config: ConversationConfig):
         self.config = config
         self.endpoint = config.llm_endpoint.rstrip('/')
-    
+        self.openrouter_client = None
+        if self.config.llm_provider == "openrouter":
+            if HAS_OPENROUTER:
+                try:
+                    self.openrouter_client = OpenRouter(api_key=self.config.llm_api_key)
+                except Exception as e:
+                    print(f"Warning: OpenRouter init failed: {e}")
+            else:
+                print("Warning: OpenRouter provider selected but openrouter package not installed.")
+
     def chat(
         self, 
         messages: list[dict],
@@ -141,6 +157,64 @@ class LLMClient:
         
         Returns the full response object including any tool calls.
         """
+        if self.config.llm_provider == "openrouter" and self.openrouter_client:
+            # Using OpenRouter SDK
+            # Note: The SDK usage in the prompt example suggests client.chat.send(...)
+            # We assume it supports tools if passed.
+            # We also need to ensure we return a dict that matches OpenAI format.
+            try:
+                # Build args
+                kwargs = {
+                    "model": self.config.llm_model,
+                    "messages": messages,
+                    # "temperature": temperature, # SDK might check this
+                }
+                # Check if SDK supports extra args like tools/temperature in .send()
+                # If it's a wrapper around requests/openai, it likely accepts kwargs.
+                if tools:
+                    kwargs["tools"] = tools
+                    kwargs["tool_choice"] = "auto"
+                if temperature is not None:
+                    kwargs["temperature"] = temperature
+
+                response = self.openrouter_client.chat.send(**kwargs)
+
+                # Convert to dict
+                if isinstance(response, dict):
+                    return response
+                if hasattr(response, "model_dump"):
+                    return response.model_dump()
+                if hasattr(response, "dict"):
+                    return response.dict()
+                
+                # Basic object to dict conversion if standard methods missing
+                # Assuming structure matches OpenAI object
+                choices_data = []
+                if hasattr(response, "choices"):
+                    for choice in response.choices:
+                        msg = choice.message
+                        msg_data = {"role": getattr(msg, "role", "assistant"), "content": getattr(msg, "content", "")}
+                        if hasattr(msg, "tool_calls") and msg.tool_calls:
+                            tc_list = []
+                            for tc in msg.tool_calls:
+                                fn = tc.function
+                                tc_list.append({
+                                    "id": tc.id,
+                                    "type": getattr(tc, "type", "function"),
+                                    "function": {
+                                        "name": fn.name,
+                                        "arguments": fn.arguments
+                                    }
+                                })
+                            msg_data["tool_calls"] = tc_list
+                        choices_data.append({"message": msg_data})
+                return {"choices": choices_data}
+
+            except Exception as e:
+                # Fallback or re-raise
+                print(f"OpenRouter SDK call failed: {e}")
+                raise
+
         payload = {
             "model": self.config.llm_model,
             "messages": messages,
@@ -442,6 +516,8 @@ Examples:
                         help='Model name to use')
     parser.add_argument('--api-key', default='not-needed',
                         help='API key for the LLM endpoint')
+    parser.add_argument('--provider', default='openai',
+                        help='LLM provider: openai, ollama, openrouter')
     
     # Database options
     parser.add_argument('--db-host', default=env_db_host, help='Database host')
@@ -472,6 +548,7 @@ Examples:
         llm_endpoint=args.endpoint,
         llm_model=args.model,
         llm_api_key=args.api_key,
+        llm_provider=args.provider,
         db_host=args.db_host,
         db_port=args.db_port,
         db_name=args.db_name,

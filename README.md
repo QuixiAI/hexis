@@ -154,6 +154,12 @@ docker compose up -d
 agi init   # choose provider=ollama, endpoint=http://localhost:11434/v1
 ```
 
+### 7b) OpenRouter
+```bash
+export OPENROUTER_API_KEY=sk-or-v1-...
+agi init   # choose provider=openrouter, model=openai/gpt-3.5-turbo
+```
+
 ### 8) Cloud Agent Backend (Production)
 
 Use managed Postgres + hosted embeddings/LLM endpoints; scale stateless workers horizontally.

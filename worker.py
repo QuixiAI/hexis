@@ -45,6 +45,12 @@ try:
 except ImportError:
     HAS_ANTHROPIC = False
 
+try:
+    from openrouter import OpenRouter
+    HAS_OPENROUTER = True
+except ImportError:
+    HAS_OPENROUTER = False
+
 # Load environment
 load_dotenv()
 
@@ -134,7 +140,7 @@ class HeartbeatWorker:
         self.llm_provider = DEFAULT_LLM_PROVIDER
         self.llm_model = DEFAULT_LLM_MODEL
         self.llm_base_url: str | None = os.getenv("OPENAI_BASE_URL") or None
-        self.llm_api_key: str | None = os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
+        self.llm_api_key: str | None = os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY") or os.getenv("OPENROUTER_API_KEY")
 
         self.llm_client = None
         if init_llm:
@@ -168,6 +174,19 @@ class HeartbeatWorker:
                 self.llm_client = anthropic.Anthropic(api_key=self.llm_api_key)
             except Exception as e:
                 logger.warning(f"Failed to initialize Anthropic client: {e}")
+            return
+
+        if self.llm_provider == "openrouter":
+            if not HAS_OPENROUTER:
+                logger.warning("OpenRouter provider selected but openrouter package is not installed.")
+                return
+            if not self.llm_api_key:
+                logger.warning("OpenRouter provider selected but no API key is configured.")
+                return
+            try:
+                self.llm_client = OpenRouter(api_key=self.llm_api_key)
+            except Exception as e:
+                logger.warning(f"Failed to initialize OpenRouter client: {e}")
             return
 
         if not HAS_OPENAI:
@@ -251,7 +270,7 @@ class HeartbeatWorker:
             api_key_env = str(cfg.get("api_key_env") or "").strip()
             api_key = os.getenv(api_key_env) if api_key_env else None
             if not api_key:
-                api_key = os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
+                api_key = os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY") or os.getenv("OPENROUTER_API_KEY")
 
             self.llm_provider = provider
             self.llm_model = model
@@ -263,7 +282,7 @@ class HeartbeatWorker:
         self.llm_provider = DEFAULT_LLM_PROVIDER
         self.llm_model = DEFAULT_LLM_MODEL
         self.llm_base_url = os.getenv("OPENAI_BASE_URL") or None
-        self.llm_api_key = os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
+        self.llm_api_key = os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY") or os.getenv("OPENROUTER_API_KEY")
         self._init_llm_client()
 
     # -------------------------------------------------------------------------
@@ -619,6 +638,27 @@ class HeartbeatWorker:
                 messages=[{"role": "user", "content": user_prompt}],
             )
             raw = response.content[0].text
+        elif self.llm_provider == "openrouter" and HAS_OPENROUTER:
+            response = self.llm_client.chat.send(
+                model=self.llm_model or "openai/gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            )
+            if hasattr(response, 'choices') and len(response.choices) > 0:
+                raw = response.choices[0].message.content
+            elif hasattr(response, 'message') and hasattr(response.message, 'content'):
+                raw = response.message.content
+            elif isinstance(response, dict):
+                 if 'choices' in response and len(response['choices']) > 0:
+                     raw = response['choices'][0]['message']['content']
+                 elif 'message' in response:
+                     raw = response['message']['content']
+                 else:
+                     raw = json.dumps(response)
+            else:
+                raw = str(response)
         elif HAS_OPENAI:
             response = self.llm_client.chat.completions.create(
                 model=self.llm_model or "gpt-4o",

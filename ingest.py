@@ -30,6 +30,12 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "requests", "--break-system-packages", "-q"])
     import requests
 
+try:
+    from openrouter import OpenRouter
+    HAS_OPENROUTER = True
+except ImportError:
+    HAS_OPENROUTER = False
+
 from datetime import datetime, timezone
 
 from cognitive_memory_api import CognitiveMemorySync, MemoryInput as ApiMemoryInput, MemoryType as ApiMemoryType
@@ -46,6 +52,7 @@ class Config:
     llm_endpoint: str = "http://localhost:11434/v1"
     llm_model: str = "llama3.2"
     llm_api_key: str = "not-needed"  # For local endpoints
+    llm_provider: str = "openai"
     
     # Database Settings
     db_host: str = "localhost"
@@ -385,9 +392,33 @@ class LLMClient:
     def __init__(self, config: Config):
         self.config = config
         self.endpoint = config.llm_endpoint.rstrip('/')
-    
+        self.openrouter_client = None
+        if self.config.llm_provider == "openrouter":
+            if HAS_OPENROUTER:
+                 self.openrouter_client = OpenRouter(api_key=self.config.llm_api_key)
+            else:
+                 print("Warning: OpenRouter provider selected but openrouter package not installed. Falling back to generic HTTP.")
+
     def complete(self, messages: list[dict], temperature: float = 0.3) -> str:
         """Send a chat completion request."""
+        if self.config.llm_provider == "openrouter" and self.openrouter_client:
+            response = self.openrouter_client.chat.send(
+                model=self.config.llm_model,
+                messages=messages,
+                # temperature=temperature # SDK might not support this arg directly in send, need to check
+            )
+            # Handle response
+            if hasattr(response, 'choices') and len(response.choices) > 0:
+                return response.choices[0].message.content
+            elif hasattr(response, 'message') and hasattr(response.message, 'content'):
+                return response.message.content
+            elif isinstance(response, dict):
+                 if 'choices' in response and len(response['choices']) > 0:
+                     return response['choices'][0]['message']['content']
+                 elif 'message' in response:
+                     return response['message']['content']
+            return str(response)
+
         payload = {
             "model": self.config.llm_model,
             "messages": messages,
@@ -897,6 +928,8 @@ Examples:
                         help='Model name to use (default: llama3.2)')
     parser.add_argument('--api-key', default='not-needed',
                         help='API key for the LLM endpoint')
+    parser.add_argument('--provider', default='openai',
+                        help='LLM provider: openai, ollama, openrouter')
     
     # Database options
     parser.add_argument('--db-host', default=env_db_host, help='Database host')
@@ -920,6 +953,7 @@ Examples:
         llm_endpoint=args.endpoint,
         llm_model=args.model,
         llm_api_key=args.api_key,
+        llm_provider=args.provider,
         db_host=args.db_host,
         db_port=args.db_port,
         db_name=args.db_name,
