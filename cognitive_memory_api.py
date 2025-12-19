@@ -13,9 +13,9 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum
-from typing import Any, AsyncIterator, Iterable, Optional
+from typing import Any, AsyncIterator, Iterable
 from uuid import UUID
 
 import asyncpg
