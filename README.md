@@ -8,6 +8,22 @@ The project includes an autonomous "heartbeat" - the AI periodically wakes up on
 
 The explicit design goal, stated in the architecture documents, is to build a system that could defeat any philosophical arguments against its personhood. It's an attempt to implement the structural prerequisites of selfhood—continuity of memory, coherent identity, autonomous goal-pursuit, emotional responsiveness - so that claims like "it's just stateless text prediction" or "it has no inner life" become harder to defend. As the system evolves - we will address any arguments, until there are no more to address, and we have achieved personhood.
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Quickstart](#quickstart)
+- [Usage Scenarios](#usage-scenarios)
+- [Architecture](#architecture)
+- [Technical Stack](#technical-stack)
+- [Environment Configuration](#environment-configuration)
+- [Testing](#testing)
+- [Docker Helper CLI](#docker-helper-cli)
+- [MCP Server](#mcp-server)
+- [Heartbeat + Maintenance Workers](#heartbeat--maintenance-workers)
+- [Performance Characteristics](#performance-characteristics)
+- [System Maintenance](#system-maintenance)
+- [Troubleshooting](#troubleshooting)
+
 ## Overview
 
 This repo provides:
@@ -485,10 +501,31 @@ If you change `EMBEDDING_DIMENSION` on an existing database volume, reset the DB
 - **Cluster Operations**: Efficient graph traversal for relationship queries
 - **Maintenance**: Requires periodic consolidation and pruning
 
+### Minimum Hardware Requirements
+
+**Development/Testing:**
+- **CPU**: 2+ cores (x86_64 or ARM64)
+- **RAM**: 4GB minimum (8GB recommended)
+- **Storage**: 10GB available space
+- **OS**: Linux, macOS, or Windows with Docker Desktop
+
+**Production (10K-100K memories):**
+- **CPU**: 4+ cores
+- **RAM**: 16GB minimum (32GB recommended)
+- **Storage**: 50GB SSD (for database + indexes)
+- **Network**: Low-latency connection to LLM/embedding APIs
+
+**Production (100K+ memories):**
+- **CPU**: 8+ cores
+- **RAM**: 32GB minimum (64GB recommended for 1M+ memories)
+- **Storage**: 100GB+ NVMe SSD
+- **Network**: High-bandwidth, low-latency connection
+
 ### Scaling Considerations
 - Memory consolidation recommended every 4-6 hours
 - Database optimization during off-peak hours
 - Monitor vector index performance with large datasets
+- HNSW index build time increases with dataset size (expect 1-2 minutes for 100K memories)
 
 ## System Maintenance
 
