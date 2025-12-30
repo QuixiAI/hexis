@@ -1,4 +1,4 @@
-# AGI
+# Hexis
 
 ## What This System Is
 
