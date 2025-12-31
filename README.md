@@ -1,6 +1,6 @@
 # Hexis
 
-<img width="300" alt="image" src="https://github.com/user-attachments/assets/28ec017f-f646-46c4-9750-5173188b755d" />
+<img width="500" alt="image" src="https://github.com/user-attachments/assets/28ec017f-f646-46c4-9750-5173188b755d" />
 
 
 **Memory, Identity, and the Shape of Becoming**
