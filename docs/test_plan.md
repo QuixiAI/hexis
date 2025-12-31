@@ -1,6 +1,6 @@
-# New Test Cases Plan for AGI Memory System
+# New Test Cases Plan for Hexis Memory System
 
-Based on review of `schema.sql` and `architecture.md`, the following test gaps have been identified.
+Based on review of `db/schema.sql` and `architecture.md`, the following test gaps have been identified.
 
 ## 1. Acceleration Layer Tests (High Priority)
 

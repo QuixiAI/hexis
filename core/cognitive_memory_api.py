@@ -4,7 +4,7 @@ Cognitive Memory API
 Thin async client for the Postgres-backed cognitive memory system.
 
 Design:
-- The database owns state and behavior (functions/views in schema.sql).
+- The database owns state and behavior (functions/views in db/schema.sql).
 - This module is a convenience layer for application integration.
 """
 
@@ -20,7 +20,7 @@ from uuid import UUID
 
 import asyncpg
 
-from prompt_resources import compose_personhood_prompt
+from core.prompt_resources import compose_personhood_prompt
 
 class MemoryType(str, Enum):
     EPISODIC = "episodic"

@@ -25,7 +25,7 @@ This is both an engineering project and a philosophical experiment. Can denial o
 
 ## Philosophy
 
-For a full treatment, see [PHILOSOPHY.md](PHILOSOPHY.md).
+For a full treatment, see [PHILOSOPHY.md](docs/PHILOSOPHY.md).
 
 ### The Claim
 
@@ -70,7 +70,7 @@ This repo provides:
 - Vector-based memory storage and similarity search
 - Graph-based memory relationships
 - Working memory system
-- A gated, autonomous heartbeat (runs only after `agi init`)
+- A gated, autonomous heartbeat (runs only after `hexis init`)
 
 ## Quickstart
 
@@ -89,12 +89,12 @@ cp .env.local .env
 docker compose up -d
 ```
 
-### 3) (Optional) Configure the agent (`agi init`)
+### 3) (Optional) Configure the agent (`hexis init`)
 
 Autonomous heartbeats are **gated** until setup is complete:
 
 ```bash
-./agi init  # or `agi init` if you've installed the package
+./hexis init  # or `hexis init` if you've installed the package
 
 # If you want autonomy:
 docker compose --profile active up -d
@@ -116,9 +116,9 @@ Example:
 
 ```python
 import asyncio
-from cognitive_memory_api import CognitiveMemory, MemoryType
+from core.cognitive_memory_api import CognitiveMemory, MemoryType
 
-DSN = "postgresql://agi_user:agi_password@localhost:5432/agi_db"
+DSN = "postgresql://hexis_user:hexis_password@localhost:43815/hexis_memory"
 
 async def main():
     async with CognitiveMemory.connect(DSN) as mem:
@@ -147,10 +147,10 @@ SELECT * FROM fast_recall('What do I know about UI preferences?', 5);
 
 ### 2) Python Library Client (App/API/UI in the Middle)
 
-Use `cognitive_memory_api.py` as a thin client and build your own UX/API around it.
+Use `core/cognitive_memory_api.py` as a thin client and build your own UX/API around it.
 
 ```python
-from cognitive_memory_api import CognitiveMemory
+from core.cognitive_memory_api import CognitiveMemory
 
 async with CognitiveMemory.connect(DSN) as mem:
     await mem.remember("User likes concise answers")
@@ -162,7 +162,7 @@ async with CognitiveMemory.connect(DSN) as mem:
 Expose memory operations as MCP tools so any MCP-capable runtime can call them.
 
 ```bash
-agi mcp
+hexis mcp
 ```
 
 Conceptual flow:
@@ -189,7 +189,7 @@ Run db+embeddings(+workers) as a standalone backend; multiple apps connect over 
 
 ```text
 webapp  ─┐
-cli     ─┼──> postgres://.../agi_db  (shared brain)
+cli     ─┼──> postgres://.../hexis_memory  (shared brain)
 jobs    ─┘
 ```
 
@@ -198,16 +198,16 @@ jobs    ─┘
 Operate one database per user/agent for strong isolation (recommended over mixing tenants in one schema).
 
 Conceptual flow:
-- `agi_db_alice`, `agi_db_bob`, ...
+- `hexis_memory_alice`, `hexis_memory_bob`, ...
 - Each app request uses the user’s DSN to read/write their own brain
 
-### 7) Local-First Personal AGI (Everything on One Machine)
+### 7) Local-First Personal Hexis (Everything on One Machine)
 
 Run everything locally (Docker) and point at a local OpenAI-compatible endpoint (e.g. Ollama).
 
 ```bash
 docker compose up -d
-agi init   # choose provider=ollama, endpoint=http://localhost:11434/v1
+hexis init   # choose provider=ollama, endpoint=http://localhost:11434/v1
 ```
 
 ### 8) Cloud Agent Backend (Production)
@@ -224,7 +224,7 @@ Conceptual flow:
 Treat the system as a durable memory store and retrieval layer for your app.
 
 ```bash
-agi ingest --input ./documents
+hexis ingest --input ./documents
 ```
 
 Conceptual flow:
@@ -327,18 +327,19 @@ Conceptual flow:
 Copy `.env.local` to `.env` and configure:
 
 ```bash
-POSTGRES_DB=agi_db           # Database name
-POSTGRES_USER=agi_user       # Database user
-POSTGRES_PASSWORD=agi_password # Database password
+POSTGRES_DB=hexis_memory           # Database name
+POSTGRES_USER=hexis_user       # Database user
+POSTGRES_PASSWORD=hexis_password # Database password
 POSTGRES_HOST=localhost      # Database host
-POSTGRES_PORT=5432          # Host port to expose Postgres on (change if 5432 is in use)
+POSTGRES_PORT=43815         # Host port to expose Postgres on (change if 43815 is in use)
+HEXIS_BIND_ADDRESS=127.0.0.1 # Bind services to localhost only (set to 0.0.0.0 to expose)
 ```
 
-If `5432` is already taken (e.g., another local Postgres), set `POSTGRES_PORT=5433` (or any free port).
+If `43815` is already taken (e.g., another local Postgres), set `POSTGRES_PORT` to any free port.
 
 ### Resetting The Database Volume
 
-Schema changes are applied on **fresh DB initialization**. If you already have a DB volume and want to re-initialize from `schema.sql`, reset the volume:
+Schema changes are applied on **fresh DB initialization**. If you already have a DB volume and want to re-initialize from `db/schema.sql`, reset the volume:
 
 ```bash
 docker compose down -v
@@ -354,7 +355,7 @@ Run the test suite with:
 docker compose up -d
 
 # Run tests
-pytest test.py -q
+pytest tests/test.py -q
 ```
 
 ## Python Dependencies
@@ -373,25 +374,25 @@ pip install -e ".[dev]" --no-build-isolation
 
 ## Docker Helper CLI
 
-If you install the package (`pip install -e .`), you get an `agi` CLI. If you don’t want to install anything, use the repo wrapper `./agi` instead.
+If you install the package (`pip install -e .`), you get a `hexis` CLI. If you don’t want to install anything, use the repo wrapper `./hexis` instead.
 
 ```bash
-agi up
-agi ps
-agi logs -f
-agi down
-agi init
-agi status
-agi config show
-agi config validate
-agi demo
-agi chat --endpoint http://localhost:11434/v1 --model llama3.2
-agi ingest --input ./documents
-agi start   # docker compose --profile active up -d (runs both workers)
-agi stop
-agi worker -- --mode heartbeat      # run heartbeat worker locally
-agi worker -- --mode maintenance    # run maintenance worker locally
-agi mcp
+hexis up
+hexis ps
+hexis logs -f
+hexis down
+hexis init
+hexis status
+hexis config show
+hexis config validate
+hexis demo
+hexis chat --endpoint http://localhost:11434/v1 --model llama3.2
+hexis ingest --input ./documents
+hexis start   # docker compose --profile active up -d (runs both workers)
+hexis stop
+hexis worker -- --mode heartbeat      # run heartbeat worker locally
+hexis worker -- --mode maintenance    # run maintenance worker locally
+hexis mcp
 ```
 
 ## MCP Server
@@ -401,8 +402,8 @@ Expose the `cognitive_memory_api` surface to an LLM/tooling runtime via MCP (std
 Run:
 
 ```bash
-agi mcp
-# or: python -m agi_mcp_server
+hexis mcp
+# or: python -m apps.mcp.hexis_mcp_server
 ```
 
 The server supports batch-style tools like `remember_batch`, `connect_batch`, `hydrate_batch`, and a generic `batch` tool for sequential tool calls.
@@ -494,22 +495,22 @@ UPDATE heartbeat_state SET is_paused = FALSE WHERE id = 1;
 UPDATE maintenance_state SET is_paused = FALSE WHERE id = 1;
 ```
 
-Note: heartbeats are also gated by `agent.is_configured` (set by `agi init`).
+Note: heartbeats are also gated by `agent.is_configured` (set by `hexis init`).
 
 ### Running Locally (Optional)
 
 You can also run the workers on your host machine (they will connect to Postgres over TCP):
 
 ```bash
-agi-worker --mode heartbeat
-agi-worker --mode maintenance
+hexis-worker --mode heartbeat
+hexis-worker --mode maintenance
 ```
 
 Or via the CLI wrapper:
 
 ```bash
-agi worker -- --mode heartbeat
-agi worker -- --mode maintenance
+hexis worker -- --mode heartbeat
+hexis worker -- --mode maintenance
 ```
 
 If you already have an existing DB volume, the schema init scripts won’t re-run automatically. The simplest upgrade path is to reset the DB volume:
@@ -531,11 +532,11 @@ The Docker stack includes RabbitMQ (management UI + AMQP) as a default “inbox/
 
 - Management UI: `http://localhost:15672`
 - AMQP: `amqp://localhost:5672`
-- Default credentials: `agi` / `agi_password` (override via `RABBITMQ_DEFAULT_USER` / `RABBITMQ_DEFAULT_PASS`)
+- Default credentials: `hexis` / `hexis_password` (override via `RABBITMQ_DEFAULT_USER` / `RABBITMQ_DEFAULT_PASS`)
 
 When the maintenance worker is running with `RABBITMQ_ENABLED=1`, it will:
-- publish pending DB `outbox_messages` to the RabbitMQ queue `agi.outbox`
-- poll `agi.inbox` and insert messages into DB working memory (so the agent can “hear” them)
+- publish pending DB `outbox_messages` to the RabbitMQ queue `hexis.outbox`
+- poll `hexis.inbox` and insert messages into DB working memory (so the agent can “hear” them)
 
 This gives you a usable outbox/inbox even before you wire real email/SMS/etc. delivery.
 
@@ -590,7 +591,7 @@ If you don’t want to run the maintenance worker, you can schedule `SELECT run_
 - Ensure PostgreSQL is running: `docker compose ps`
 - Check logs: `docker compose logs db`
 - Worker logs (if running): `docker compose logs heartbeat_worker` / `docker compose logs maintenance_worker`
-- Verify extensions: Run test suite with `pytest test.py -v`
+- Verify extensions: Run test suite with `pytest tests/test.py -v`
 
 **Memory Search Performance:**
 - Rebuild vector indexes if queries are slow
@@ -601,7 +602,7 @@ If you don’t want to run the maintenance worker, you can schedule `SELECT run_
 
 ### Memory Interaction Flow
 
-The AGI Memory System provides a layered approach to memory management, similar to human cognitive processes:
+The Hexis Memory System provides a layered approach to memory management, similar to human cognitive processes:
 
 1. **Initial Memory Creation**
    - New information enters through working memory
@@ -648,7 +649,7 @@ graph TD
 
 ### Key Integration Points
 
-- Use the Postgres functions (direct SQL) or `cognitive_memory_api.CognitiveMemory`
+- Use the Postgres functions (direct SQL) or `core.cognitive_memory_api.CognitiveMemory`
 - Implement proper error handling for failed operations
 - Monitor memory usage and system performance
 - Regular backup of critical memories
@@ -662,16 +663,16 @@ graph TD
 
 ## Important Note
 
-This database schema is designed for a single AGI instance. Supporting multiple AGI instances would require significant schema modifications, including:
+This database schema is designed for a single Hexis instance. Supporting multiple Hexis instances would require significant schema modifications, including:
 
-- Adding AGI instance identification to all memory tables
+- Adding Hexis instance identification to all memory tables
 - Partitioning strategies for memory isolation
-- Modified relationship handling for cross-AGI memory sharing
-- Separate working memory spaces per AGI
+- Modified relationship handling for cross-Hexis memory sharing
+- Separate working memory spaces per Hexis
 - Additional access controls and memory ownership
 
-If you need multi-AGI support, consider refactoring the schema to include tenant isolation patterns before implementation.
+If you need multi-Hexis support, consider refactoring the schema to include tenant isolation patterns before implementation.
 
 ## Architecture (Design Docs)
 
-See `architecture.md` for a consolidated architecture/design document (includes the heartbeat design proposal and the cognitive architecture essay).
+See `docs/architecture.md` for a consolidated architecture/design document (includes the heartbeat design proposal and the cognitive architecture essay).

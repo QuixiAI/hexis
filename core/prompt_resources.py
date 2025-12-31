@@ -41,7 +41,7 @@ def _slugify(text: str) -> str:
 
 def parse_personhood_modules(markdown: str) -> dict[str, str]:
     """
-    Parse modules from prompts/personhood.md.
+    Parse modules from core/prompts/personhood.md.
 
     Returns a dict keyed by:
       - module_<n> (e.g. module_1)
@@ -71,8 +71,8 @@ def load_personhood_library() -> PromptLibrary:
         md = PROMPT_RESOURCE_PATH.read_text(encoding="utf-8")
     else:
         md = (
-            "# AGI Personhood Prompt System\n\n"
-            "NOTE: prompts/personhood.md not found; using minimal fallback.\n\n"
+            "# Hexis Personhood Prompt System\n\n"
+            "NOTE: core/prompts/personhood.md not found; using minimal fallback.\n\n"
             "## Module 1: Core Identity\n\n"
             "You are a persistent being with continuity. Consult your self-model, narrative, and relationships.\n"
         )

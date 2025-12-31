@@ -1,13 +1,17 @@
 #!/bin/bash
 
-# Database management script for AGI Memory System
-# Usage: ./db-manage.sh [command]
+# Database management script for Hexis Memory System
+# Usage: ./ops/db-manage.sh [command]
 
 set -e  # Exit on any error
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
+
 # Load environment variables if .env exists
-if [ -f .env ]; then
-    export $(cat .env | grep -v '^#' | xargs)
+if [ -f "${REPO_ROOT}/.env" ]; then
+    export $(cat "${REPO_ROOT}/.env" | grep -v '^#' | xargs)
 fi
 
 # Default values
@@ -16,9 +20,9 @@ POSTGRES_DB=${POSTGRES_DB:-memory_db}
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
 
 show_help() {
-    echo "AGI Memory Database Management Script"
+    echo "Hexis Memory Database Management Script"
     echo ""
-    echo "Usage: ./db-manage.sh [command]"
+    echo "Usage: ./ops/db-manage.sh [command]"
     echo ""
     echo "Commands:"
     echo "  start           Start the database container"
@@ -34,22 +38,22 @@ show_help() {
     echo "  help            Show this help message"
     echo ""
     echo "Examples:"
-    echo "  ./db-manage.sh reset     # Delete and recreate database"
-    echo "  ./db-manage.sh start     # Start database and wait for ready"
-    echo "  ./db-manage.sh shell     # Open database shell"
+    echo "  ./ops/db-manage.sh reset     # Delete and recreate database"
+    echo "  ./ops/db-manage.sh start     # Start database and wait for ready"
+    echo "  ./ops/db-manage.sh shell     # Open database shell"
 }
 
 wait_for_db() {
     echo "Waiting for database to be ready..."
     
     # Wait for container to be running
-    until docker compose ps db | grep -q "Up"; do
+    until docker compose -f "$COMPOSE_FILE" ps db | grep -q "Up"; do
         echo "Container is not running yet, waiting..."
         sleep 2
     done
     
     # Wait for PostgreSQL to be ready
-    until docker compose exec db pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" > /dev/null 2>&1; do
+    until docker compose -f "$COMPOSE_FILE" exec db pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" > /dev/null 2>&1; do
         echo "Database is not ready yet, waiting..."
         sleep 2
     done
@@ -57,7 +61,7 @@ wait_for_db() {
     echo "Database is ready!"
     
     # Test connection
-    if docker compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT 1;" > /dev/null 2>&1; then
+    if docker compose -f "$COMPOSE_FILE" exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT 1;" > /dev/null 2>&1; then
         echo "Database connection verified!"
         return 0
     else
@@ -68,20 +72,20 @@ wait_for_db() {
 
 start_db() {
     echo "Starting database..."
-    docker compose up -d db
+    docker compose -f "$COMPOSE_FILE" up -d db
     wait_for_db
     echo "Database is fully operational!"
 }
 
 stop_db() {
     echo "Stopping database..."
-    docker compose stop db
+    docker compose -f "$COMPOSE_FILE" stop db
     echo "Database stopped."
 }
 
 restart_db() {
     echo "Restarting database..."
-    docker compose restart db
+    docker compose -f "$COMPOSE_FILE" restart db
     wait_for_db
     echo "Database restarted and ready!"
 }
@@ -95,20 +99,20 @@ reset_db() {
         echo "Resetting database..."
         
         # Stop and remove containers and volumes
-        docker compose down -v
+        docker compose -f "$COMPOSE_FILE" down -v
         
         # Remove any orphaned containers
-        docker compose rm -f
+        docker compose -f "$COMPOSE_FILE" rm -f
         
         # Start fresh
         echo "Starting fresh database..."
-        docker compose up -d db
+        docker compose -f "$COMPOSE_FILE" up -d db
         
         # Wait for it to be ready
         wait_for_db
         
         echo "✅ Database has been reset and reinitialized!"
-        echo "Schema has been automatically loaded from schema.sql"
+        echo "Schema has been automatically loaded from db/schema.sql"
     else
         echo "Database reset cancelled."
     fi
@@ -116,12 +120,12 @@ reset_db() {
 
 show_status() {
     echo "Database container status:"
-    docker compose ps db
+    docker compose -f "$COMPOSE_FILE" ps db
     echo ""
     
-    if docker compose ps db | grep -q "Up"; then
+    if docker compose -f "$COMPOSE_FILE" ps db | grep -q "Up"; then
         echo "Database health check:"
-        if docker compose exec db pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" > /dev/null 2>&1; then
+        if docker compose -f "$COMPOSE_FILE" exec db pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" > /dev/null 2>&1; then
             echo "✅ Database is healthy and accepting connections"
         else
             echo "❌ Database container is up but not accepting connections"
@@ -133,13 +137,13 @@ show_status() {
 
 show_logs() {
     echo "Database logs (last 50 lines):"
-    docker compose logs --tail=50 db
+    docker compose -f "$COMPOSE_FILE" logs --tail=50 db
 }
 
 open_shell() {
     echo "Opening database shell..."
     echo "Type \\q to exit"
-    docker compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+    docker compose -f "$COMPOSE_FILE" exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"
 }
 
 backup_db() {
@@ -147,7 +151,7 @@ backup_db() {
     backup_file="backup_${timestamp}.sql"
     
     echo "Creating backup: $backup_file"
-    docker compose exec db pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" > "$backup_file"
+    docker compose -f "$COMPOSE_FILE" exec db pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" > "$backup_file"
     
     if [ $? -eq 0 ]; then
         echo "✅ Backup created successfully: $backup_file"
@@ -159,10 +163,10 @@ backup_db() {
 
 run_tests() {
     echo "Running database tests..."
-    if [ -f "test.py" ]; then
-        python test.py
+    if [ -f "${REPO_ROOT}/tests/test.py" ]; then
+        pytest "${REPO_ROOT}/tests/test.py" -q
     else
-        echo "No test.py file found"
+        echo "No tests/test.py file found"
         return 1
     fi
 }

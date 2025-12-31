@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AGI Memory Conversation Loop
+Hexis Memory Conversation Loop
 
 A conversation interface that:
 1. Enriches user prompts with relevant memories (RAG-style)
@@ -8,7 +8,7 @@ A conversation interface that:
 3. Forms new memories from conversations
 
 Usage:
-    python conversation.py --endpoint http://localhost:11434/v1 --model llama3.2
+    python -m core.conversation --endpoint http://localhost:11434/v1 --model llama3.2
 """
 
 import argparse
@@ -25,7 +25,7 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "requests", "--break-system-packages", "-q"])
     import requests
 
-from memory_tools import (
+from core.memory_tools import (
     get_tool_definitions,
     create_tool_handler,
     create_enricher,
@@ -48,8 +48,8 @@ class ConversationConfig:
     
     # Database Settings
     db_host: str = "localhost"
-    db_port: int = 5432
-    db_name: str = "agi_memory"
+    db_port: int = 43815
+    db_name: str = "hexis_memory"
     db_user: str = "postgres"
     db_password: str = "password"
     
@@ -104,10 +104,10 @@ Before each user message, you may receive [RELEVANT MEMORIES] - these are automa
 
 You are a helpful, knowledgeable assistant with the added capability of genuine memory and continuity."""
 
-# Optional: personhood prompt modules (kept in prompts/personhood.md). If the resource
+# Optional: personhood prompt modules (kept in core/prompts/personhood.md). If the resource
 # isn't present (or in constrained environments), the conversation loop still works.
 try:
-    from prompt_resources import compose_personhood_prompt
+    from core.prompt_resources import compose_personhood_prompt
 
     SYSTEM_PROMPT = (
         SYSTEM_PROMPT
@@ -326,7 +326,7 @@ class ConversationManager:
 def run_interactive(config: ConversationConfig):
     """Run an interactive conversation loop."""
     print("=" * 60)
-    print("AGI MEMORY CONVERSATION INTERFACE")
+    print("HEXIS MEMORY CONVERSATION INTERFACE")
     print("=" * 60)
     print(f"Model: {config.llm_model}")
     print(f"Endpoint: {config.llm_endpoint}")
@@ -407,31 +407,31 @@ def run_interactive(config: ConversationConfig):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="AGI Memory Conversation Interface",
+        description="Hexis Memory Conversation Interface",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   # Start with default settings (Ollama)
-  python conversation.py
-  
+  python -m core.conversation
+
   # Use a specific model
-  python conversation.py --model mistral --endpoint http://localhost:11434/v1
-  
+  python -m core.conversation --model mistral --endpoint http://localhost:11434/v1
+
   # Connect to a remote endpoint
-  python conversation.py --endpoint https://api.example.com/v1 --api-key sk-xxx
-  
+  python -m core.conversation --endpoint https://api.example.com/v1 --api-key sk-xxx
+
   # Custom database
-  python conversation.py --db-host localhost --db-name my_memory
+  python -m core.conversation --db-host localhost --db-name my_memory
         """
     )
     
     env_db_host = os.getenv("POSTGRES_HOST", "localhost")
     env_db_port_raw = os.getenv("POSTGRES_PORT")
     try:
-        env_db_port = int(env_db_port_raw) if env_db_port_raw else 5432
+        env_db_port = int(env_db_port_raw) if env_db_port_raw else 43815
     except ValueError:
-        env_db_port = 5432
-    env_db_name = os.getenv("POSTGRES_DB", "agi_memory")
+        env_db_port = 43815
+    env_db_name = os.getenv("POSTGRES_DB", "hexis_memory")
     env_db_user = os.getenv("POSTGRES_USER", "postgres")
     env_db_password = os.getenv("POSTGRES_PASSWORD", "password")
 

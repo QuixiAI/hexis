@@ -19,16 +19,25 @@ def _print_err(msg: str) -> None:
     sys.stderr.write(msg + "\n")
 
 
-def _find_stack_dir(start: Path | None = None) -> Path:
+def _find_compose_file(start: Path | None = None) -> Path | None:
     """
-    Find a directory containing docker-compose.yml by walking up from CWD.
-    Falls back to CWD if not found.
+    Find docker-compose.yml (preferred) or ops/docker-compose.yml by walking up from CWD.
     """
     cur = (start or Path.cwd()).resolve()
     for parent in (cur,) + tuple(cur.parents):
-        if (parent / "docker-compose.yml").exists():
-            return parent
-    return cur
+        legacy_compose = parent / "docker-compose.yml"
+        if legacy_compose.exists():
+            return legacy_compose
+        ops_compose = parent / "ops" / "docker-compose.yml"
+        if ops_compose.exists():
+            return ops_compose
+    return None
+
+
+def _stack_root_from_compose(compose_file: Path) -> Path:
+    if compose_file.parent.name == "ops":
+        return compose_file.parent.parent
+    return compose_file.parent
 
 
 def ensure_docker() -> str:
@@ -57,12 +66,12 @@ def ensure_compose(docker_bin: str) -> list[str]:
     raise SystemExit(1)
 
 
-def resolve_env_file(stack_dir: Path) -> Path | None:
+def resolve_env_file(stack_root: Path) -> Path | None:
     candidates = [
         Path.cwd() / ".env",
         Path.cwd() / ".env.local",
-        stack_dir / ".env",
-        stack_dir / ".env.local",
+        stack_root / ".env",
+        stack_root / ".env.local",
     ]
     for path in candidates:
         if path.exists():
@@ -70,19 +79,20 @@ def resolve_env_file(stack_dir: Path) -> Path | None:
     return None
 
 
-def run_compose(compose_cmd: list[str], stack_dir: Path, args: list[str], env_file: Path | None) -> int:
-    compose_file = stack_dir / "docker-compose.yml"
-    if not compose_file.exists():
-        _print_err(f"docker-compose.yml not found in {stack_dir} (run from the repo root?)")
-        return 1
-
+def run_compose(
+    compose_cmd: list[str],
+    compose_file: Path,
+    stack_root: Path,
+    args: list[str],
+    env_file: Path | None,
+) -> int:
     cmd = compose_cmd + ["-f", str(compose_file)]
     if env_file:
         cmd += ["--env-file", str(env_file)]
     cmd += args
 
     try:
-        result = subprocess.run(cmd, cwd=stack_dir, env=os.environ.copy())
+        result = subprocess.run(cmd, cwd=stack_root, env=os.environ.copy())
         return result.returncode
     except FileNotFoundError:
         _print_err("Failed to run docker compose. Ensure Docker is installed.")
@@ -90,18 +100,14 @@ def run_compose(compose_cmd: list[str], stack_dir: Path, args: list[str], env_fi
 
 
 def _run_compose_capture(
-    compose_cmd: list[str], stack_dir: Path, args: list[str], env_file: Path | None
+    compose_cmd: list[str], compose_file: Path, stack_root: Path, args: list[str], env_file: Path | None
 ) -> tuple[int, str]:
-    compose_file = stack_dir / "docker-compose.yml"
-    if not compose_file.exists():
-        return 1, f"docker-compose.yml not found in {stack_dir} (run from the repo root?)"
-
     cmd = compose_cmd + ["-f", str(compose_file)]
     if env_file:
         cmd += ["--env-file", str(env_file)]
     cmd += args
     try:
-        p = subprocess.run(cmd, cwd=stack_dir, env=os.environ.copy(), capture_output=True, text=True)
+        p = subprocess.run(cmd, cwd=stack_root, env=os.environ.copy(), capture_output=True, text=True)
         out = (p.stdout or "") + (("\n" + p.stderr) if p.stderr else "")
         return p.returncode, out.strip()
     except FileNotFoundError:
@@ -110,10 +116,10 @@ def _run_compose_capture(
 
 def _env_dsn() -> str:
     db_host = os.getenv("POSTGRES_HOST", "localhost")
-    db_port = os.getenv("POSTGRES_PORT", "5432")
-    db_name = os.getenv("POSTGRES_DB", "agi_db")
-    db_user = os.getenv("POSTGRES_USER", "agi_user")
-    db_password = os.getenv("POSTGRES_PASSWORD", "agi_password")
+    db_port = os.getenv("POSTGRES_PORT", "43815")
+    db_name = os.getenv("POSTGRES_DB", "hexis_memory")
+    db_user = os.getenv("POSTGRES_USER", "hexis_user")
+    db_password = os.getenv("POSTGRES_PASSWORD", "hexis_password")
     return f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
 
 
@@ -236,16 +242,16 @@ async def _config_validate(dsn: str, *, wait_seconds: int) -> tuple[list[str], l
             if is_conf == "true":
                 is_conf = True
         if is_conf is not True:
-            errors.append("agent.is_configured is not true (run `agi init`).")
+            errors.append("agent.is_configured is not true (run `hexis init`).")
 
         objectives = cfg.get("agent.objectives")
         if not isinstance(objectives, list) or not objectives:
-            errors.append("agent.objectives must be a non-empty array (run `agi init`).")
+            errors.append("agent.objectives must be a non-empty array (run `hexis init`).")
 
         def _validate_llm(name: str) -> None:
             val = cfg.get(name)
             if not isinstance(val, dict):
-                errors.append(f"{name} must be an object (run `agi init`).")
+                errors.append(f"{name} must be an object (run `hexis init`).")
                 return
             provider = str(val.get("provider") or "").strip().lower()
             model = str(val.get("model") or "").strip()
@@ -283,7 +289,7 @@ async def _config_validate(dsn: str, *, wait_seconds: int) -> tuple[list[str], l
 
 
 async def _demo(dsn: str, *, wait_seconds: int) -> dict[str, Any]:
-    from cognitive_memory_api import CognitiveMemory, MemoryType
+    from core.cognitive_memory_api import CognitiveMemory, MemoryType
 
     # Wait for DB.
     conn = await _connect_with_retry(dsn, wait_seconds=wait_seconds)
@@ -307,7 +313,11 @@ async def _demo(dsn: str, *, wait_seconds: int) -> dict[str, Any]:
     async with CognitiveMemory.connect(dsn) as mem:
         # Minimal end-to-end: remember -> recall -> hydrate -> working memory.
         m1 = await mem.remember("Demo: the user prefers short, direct answers", type=MemoryType.SEMANTIC, importance=0.7)
-        m2 = await mem.remember("Demo: the user is working on an AGI memory system", type=MemoryType.EPISODIC, importance=0.6)
+        m2 = await mem.remember(
+            "Demo: the user is working on the Hexis memory system",
+            type=MemoryType.EPISODIC,
+            importance=0.6,
+        )
         held = await mem.hold("Demo: temporary context in working memory", ttl_seconds=600)
 
         recall = await mem.recall("What do I know about the user's preferences?", limit=5)
@@ -324,7 +334,7 @@ async def _demo(dsn: str, *, wait_seconds: int) -> dict[str, Any]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="agi", description="Manage AGI Memory Docker stack")
+    p = argparse.ArgumentParser(prog="hexis", description="Manage Hexis Memory Docker stack")
     sub = p.add_subparsers(dest="command", required=True)
 
     up = sub.add_parser("up", help="Start the stack")
@@ -341,24 +351,24 @@ def build_parser() -> argparse.ArgumentParser:
     ps = sub.add_parser("ps", help="List services")
     ps.set_defaults(func="ps")
 
-    chat = sub.add_parser("chat", help="Run the conversation loop (forwards args to conversation.py)")
-    chat.add_argument("args", nargs=argparse.REMAINDER, help="Arguments forwarded to conversation.py")
+    chat = sub.add_parser("chat", help="Run the conversation loop (forwards args to core.conversation)")
+    chat.add_argument("args", nargs=argparse.REMAINDER, help="Arguments forwarded to core.conversation")
     chat.set_defaults(func="chat")
 
-    ingest = sub.add_parser("ingest", help="Run the ingestion pipeline (forwards args to ingest.py)")
-    ingest.add_argument("args", nargs=argparse.REMAINDER, help="Arguments forwarded to ingest.py")
+    ingest = sub.add_parser("ingest", help="Run the ingestion pipeline (forwards args to core.ingest)")
+    ingest.add_argument("args", nargs=argparse.REMAINDER, help="Arguments forwarded to core.ingest")
     ingest.set_defaults(func="ingest")
 
-    worker = sub.add_parser("worker", help="Run background workers (forwards args to worker.py)")
-    worker.add_argument("args", nargs=argparse.REMAINDER, help="Arguments forwarded to worker.py")
+    worker = sub.add_parser("worker", help="Run background workers (forwards args to apps.workers.worker)")
+    worker.add_argument("args", nargs=argparse.REMAINDER, help="Arguments forwarded to apps.workers.worker")
     worker.set_defaults(func="worker")
 
-    init = sub.add_parser("init", help="Interactive AGI setup wizard (stores config in Postgres)")
-    init.add_argument("args", nargs=argparse.REMAINDER, help="Arguments forwarded to agi_init.py")
+    init = sub.add_parser("init", help="Interactive Hexis setup wizard (stores config in Postgres)")
+    init.add_argument("args", nargs=argparse.REMAINDER, help="Arguments forwarded to apps.cli.hexis_init")
     init.set_defaults(func="init")
 
     mcp = sub.add_parser("mcp", help="Run MCP server exposing CognitiveMemory tools (stdio)")
-    mcp.add_argument("args", nargs=argparse.REMAINDER, help="Arguments forwarded to agi_mcp_server.py")
+    mcp.add_argument("args", nargs=argparse.REMAINDER, help="Arguments forwarded to apps.mcp.hexis_mcp_server")
     mcp.set_defaults(func="mcp")
 
     start = sub.add_parser("start", help="Start workers (active profile)")
@@ -414,13 +424,17 @@ def main(argv: list[str] | None = None) -> int:
     load_dotenv()
     args = build_parser().parse_args(argv)
 
-    stack_dir = _find_stack_dir()
-    env_file = resolve_env_file(stack_dir)
+    compose_file = _find_compose_file()
+    stack_root = _stack_root_from_compose(compose_file) if compose_file else Path.cwd()
+    env_file = resolve_env_file(stack_root)
 
     docker_cmds = {"up", "down", "ps", "logs", "start", "stop"}
     docker_bin: str | None = None
     compose_cmd: list[str] | None = None
     if args.func in docker_cmds:
+        if compose_file is None:
+            _print_err("docker-compose.yml not found.")
+            return 1
         docker_bin = ensure_docker()
         compose_cmd = ensure_compose(docker_bin)
 
@@ -428,33 +442,40 @@ def main(argv: list[str] | None = None) -> int:
         up_args = ["up", "-d"]
         if args.build:
             up_args.append("--build")
-        return run_compose(compose_cmd or [], stack_dir, up_args, env_file)
+        return run_compose(compose_cmd or [], compose_file, stack_root, up_args, env_file)
     if args.func == "down":
-        return run_compose(compose_cmd or [], stack_dir, ["down"], env_file)
+        return run_compose(compose_cmd or [], compose_file, stack_root, ["down"], env_file)
     if args.func == "ps":
-        return run_compose(compose_cmd or [], stack_dir, ["ps"], env_file)
+        return run_compose(compose_cmd or [], compose_file, stack_root, ["ps"], env_file)
     if args.func == "logs":
         log_args = ["logs"] + (["-f"] if args.follow else [])
-        return run_compose(compose_cmd or [], stack_dir, log_args, env_file)
+        return run_compose(compose_cmd or [], compose_file, stack_root, log_args, env_file)
     if args.func == "chat":
-        return _run_module("conversation", args.args)
+        return _run_module("core.conversation", args.args)
     if args.func == "ingest":
-        return _run_module("ingest", args.args)
+        return _run_module("core.ingest", args.args)
     if args.func == "worker":
-        return _run_module("worker", args.args)
+        return _run_module("apps.workers.worker", args.args)
     if args.func == "init":
-        return _run_module("agi_init", args.args)
+        return _run_module("apps.cli.hexis_init", args.args)
     if args.func == "mcp":
-        return _run_module("agi_mcp_server", args.args)
+        return _run_module("apps.mcp.hexis_mcp_server", args.args)
     if args.func == "start":
         return run_compose(
             compose_cmd or [],
-            stack_dir,
+            compose_file,
+            stack_root,
             ["--profile", "active", "up", "-d", "heartbeat_worker", "maintenance_worker"],
             env_file,
         )
     if args.func == "stop":
-        return run_compose(compose_cmd or [], stack_dir, ["stop", "heartbeat_worker", "maintenance_worker"], env_file)
+        return run_compose(
+            compose_cmd or [],
+            compose_file,
+            stack_root,
+            ["stop", "heartbeat_worker", "maintenance_worker"],
+            env_file,
+        )
     if args.func == "status":
         dsn = args.dsn or _env_dsn()
         payload = asyncio.run(_status_payload(dsn, wait_seconds=args.wait_seconds))
@@ -462,7 +483,9 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 docker_bin = ensure_docker()
                 compose_cmd = ensure_compose(docker_bin)
-                rc, out = _run_compose_capture(compose_cmd, stack_dir, ["ps"], env_file)
+                if compose_file is None:
+                    raise SystemExit
+                rc, out = _run_compose_capture(compose_cmd, compose_file, stack_root, ["ps"], env_file)
                 payload["docker_ps_rc"] = rc
                 payload["docker_ps"] = out
             except SystemExit:

@@ -3,9 +3,9 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "agi-memory"
+name = "hexis"
 version = "0.1.0"
-description = "AGI memory system (Postgres + pgvector + AGE) with Python tooling."
+description = "Hexis memory system (Postgres + pgvector + AGE) with Python tooling."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -24,9 +24,9 @@ dependencies = [
 ]
 
 [project.scripts]
-agi = "agi_cli:main"
-agi-worker = "worker:main"
-agi-mcp = "agi_mcp_server:main"
+hexis = "apps.cli.hexis_cli:main"
+hexis-worker = "apps.workers.worker:main"
+hexis-mcp = "apps.mcp.hexis_mcp_server:main"
 
 [project.optional-dependencies]
 anthropic = [
@@ -45,5 +45,11 @@ dev = [
 ]
 
 [tool.setuptools]
-py-modules = ["agi_cli", "agi_init", "agi_mcp_server", "conversation", "ingest", "memory_tools", "worker", "cognitive_memory_api", "prompt_resources"]
-include-package-data = false
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["apps*", "core*"]
+
+[tool.setuptools.package-data]
+core = ["prompts/*.md"]

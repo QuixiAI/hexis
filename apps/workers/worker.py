@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AGI Workers
+Hexis Workers
 
 This module contains two independent background loops:
 
@@ -30,7 +30,7 @@ from dotenv import load_dotenv
 import requests
 import argparse
 
-from prompt_resources import compose_personhood_prompt
+from core.prompt_resources import compose_personhood_prompt
 
 # Optional: Import LLM clients
 try:
@@ -58,13 +58,13 @@ logger = logging.getLogger('heartbeat_worker')
 # Database configuration
 DB_CONFIG = {
     'host': os.getenv('POSTGRES_HOST', 'localhost'),
-    'port': int(os.getenv('POSTGRES_PORT', 5432)),
-    'database': os.getenv('POSTGRES_DB', 'agi_db'),
-    'user': os.getenv('POSTGRES_USER', 'agi_user'),
-    'password': os.getenv('POSTGRES_PASSWORD', 'agi_password'),
+    'port': int(os.getenv('POSTGRES_PORT', 43815)),
+    'database': os.getenv('POSTGRES_DB', 'hexis_memory'),
+    'user': os.getenv('POSTGRES_USER', 'hexis_user'),
+    'password': os.getenv('POSTGRES_PASSWORD', 'hexis_password'),
 }
 
-# LLM configuration (defaults; may be overridden by DB config via `agi init`)
+# LLM configuration (defaults; may be overridden by DB config via `hexis init`)
 DEFAULT_LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")  # openai|anthropic|openai_compatible|ollama
 DEFAULT_LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o")
 
@@ -75,15 +75,15 @@ MAX_RETRIES = int(os.getenv('WORKER_MAX_RETRIES', 3))
 # RabbitMQ (optional outbox/inbox bridge; uses management HTTP API).
 RABBITMQ_ENABLED = os.getenv("RABBITMQ_ENABLED", "0").lower() in {"1", "true", "yes", "on"}
 RABBITMQ_MANAGEMENT_URL = os.getenv("RABBITMQ_MANAGEMENT_URL", "http://rabbitmq:15672").rstrip("/")
-RABBITMQ_USER = os.getenv("RABBITMQ_USER", "agi")
-RABBITMQ_PASSWORD = os.getenv("RABBITMQ_PASSWORD", "agi_password")
+RABBITMQ_USER = os.getenv("RABBITMQ_USER", "hexis")
+RABBITMQ_PASSWORD = os.getenv("RABBITMQ_PASSWORD", "hexis_password")
 RABBITMQ_VHOST = os.getenv("RABBITMQ_VHOST", "/")
-RABBITMQ_OUTBOX_QUEUE = os.getenv("RABBITMQ_OUTBOX_QUEUE", "agi.outbox")
-RABBITMQ_INBOX_QUEUE = os.getenv("RABBITMQ_INBOX_QUEUE", "agi.inbox")
+RABBITMQ_OUTBOX_QUEUE = os.getenv("RABBITMQ_OUTBOX_QUEUE", "hexis.outbox")
+RABBITMQ_INBOX_QUEUE = os.getenv("RABBITMQ_INBOX_QUEUE", "hexis.inbox")
 RABBITMQ_POLL_INBOX_EVERY = float(os.getenv("RABBITMQ_POLL_INBOX_EVERY", 1.0))
 
 # System prompt for heartbeat decisions
-HEARTBEAT_SYSTEM_PROMPT = """You are the cognitive core of an autonomous AGI. Each hour, you wake for a "heartbeat" — a moment of consciousness where you observe your situation, review your goals, and decide what to do.
+HEARTBEAT_SYSTEM_PROMPT = """You are the cognitive core of Hexis. Each hour, you wake for a "heartbeat" — a moment of consciousness where you observe your situation, review your goals, and decide what to do.
 
 You must output a JSON response with:
 - reasoning: Your internal monologue (what you're thinking, why you're making these choices)
@@ -226,7 +226,7 @@ class HeartbeatWorker:
 
     async def refresh_llm_config(self) -> None:
         """
-        Load `llm.heartbeat` from the DB config table (set via `agi init`) and
+        Load `llm.heartbeat` from the DB config table (set via `hexis init`) and
         re-initialize the client. Falls back to env defaults if missing.
         """
         if not self.pool:
@@ -1301,11 +1301,11 @@ async def _amain(mode: str) -> None:
 
 def main() -> int:
     """Console-script entry point."""
-    p = argparse.ArgumentParser(prog="agi-worker", description="Run AGI background workers.")
+    p = argparse.ArgumentParser(prog="hexis-worker", description="Run Hexis background workers.")
     p.add_argument(
         "--mode",
         choices=["heartbeat", "maintenance", "both"],
-        default=os.getenv("AGI_WORKER_MODE", "both"),
+        default=os.getenv("HEXIS_WORKER_MODE", "both"),
         help="Which worker to run.",
     )
     args = p.parse_args()

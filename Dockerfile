@@ -48,4 +48,4 @@ RUN rm -rf /tmp/* && \
     rm -rf /var/lib/apt/lists/*
 
 # Run schema/init on first database startup.
-COPY schema.sql /docker-entrypoint-initdb.d/init.sql
+COPY db/schema.sql /docker-entrypoint-initdb.d/init.sql

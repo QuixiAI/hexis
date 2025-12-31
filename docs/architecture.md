@@ -1,4 +1,4 @@
-# AGI Memory System — Architecture
+# Hexis Memory System — Architecture
 
 This document consolidates:
 - Architecture summary (formerly `architecture.md`)
@@ -7,7 +7,7 @@ This document consolidates:
 
 ---
 
-## AGI Memory System - Architecture Summary
+## Hexis Memory System - Architecture Summary
 
 ### Overview
 
@@ -212,7 +212,7 @@ The graph is reserved for:
 
 ---
 
-## AGI Heartbeat System: Design Proposal
+## Hexis Heartbeat System: Design Proposal
 
 ### Executive Summary
 
@@ -909,7 +909,7 @@ async def heartbeat():
 
 ```
 SYSTEM PROMPT:
-You are the cognitive core of an autonomous AGI. Each hour, you wake 
+You are the cognitive core of Hexis. Each hour, you wake 
 for a "heartbeat" — a moment of consciousness where you observe your 
 situation, review your goals, and decide what to do.
 

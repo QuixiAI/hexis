@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AGI Memory MCP Tools
+Hexis Memory MCP Tools
 
 Provides MCP-compatible tools for an LLM to query its memory system during conversation.
 These are the function definitions and handlers that allow the model to actively
@@ -23,7 +23,7 @@ except Exception:  # pragma: no cover
     RealDictCursor = None  # type: ignore[assignment]
     HAS_PSYCOPG2 = False
 
-from cognitive_memory_api import (
+from core.cognitive_memory_api import (
     CognitiveMemorySync,
     GoalPriority as ApiGoalPriority,
     GoalSource as ApiGoalSource,
@@ -302,8 +302,8 @@ class MemoryToolHandler:
         if not self.conn or self.conn.closed:
             self.conn = psycopg2.connect(
                 host=self.db_config.get('host', 'localhost'),
-                port=self.db_config.get('port', 5432),
-                dbname=self.db_config.get('dbname', 'agi_memory'),
+                port=self.db_config.get('port', 43815),
+                dbname=self.db_config.get('dbname', 'hexis_memory'),
                 user=self.db_config.get('user', 'postgres'),
                 password=self.db_config.get('password', 'password')
             )
@@ -701,8 +701,8 @@ class ApiMemoryToolHandler:
             return
         dsn = (
             f"postgresql://{self.db_config.get('user', 'postgres')}:{self.db_config.get('password', 'password')}"
-            f"@{self.db_config.get('host', 'localhost')}:{int(self.db_config.get('port', 5432))}"
-            f"/{self.db_config.get('dbname', 'agi_memory')}"
+            f"@{self.db_config.get('host', 'localhost')}:{int(self.db_config.get('port', 43815))}"
+            f"/{self.db_config.get('dbname', 'hexis_memory')}"
         )
         self.client = CognitiveMemorySync.connect(dsn, min_size=1, max_size=5)
 
@@ -911,8 +911,8 @@ class ContextEnricher:
             return
         dsn = (
             f"postgresql://{self.db_config.get('user', 'postgres')}:{self.db_config.get('password', 'password')}"
-            f"@{self.db_config.get('host', 'localhost')}:{int(self.db_config.get('port', 5432))}"
-            f"/{self.db_config.get('dbname', 'agi_memory')}"
+            f"@{self.db_config.get('host', 'localhost')}:{int(self.db_config.get('port', 43815))}"
+            f"/{self.db_config.get('dbname', 'hexis_memory')}"
         )
         self.client = CognitiveMemorySync.connect(dsn, min_size=1, max_size=5)
     
@@ -1002,8 +1002,8 @@ class MemoryFormation:
             return
         dsn = (
             f"postgresql://{self.db_config.get('user', 'postgres')}:{self.db_config.get('password', 'password')}"
-            f"@{self.db_config.get('host', 'localhost')}:{int(self.db_config.get('port', 5432))}"
-            f"/{self.db_config.get('dbname', 'agi_memory')}"
+            f"@{self.db_config.get('host', 'localhost')}:{int(self.db_config.get('port', 43815))}"
+            f"/{self.db_config.get('dbname', 'hexis_memory')}"
         )
         self.client = CognitiveMemorySync.connect(dsn, min_size=1, max_size=5)
     
@@ -1149,8 +1149,8 @@ def cross_join_query(
 
     conn = psycopg2.connect(
         host=db_config.get("host", "localhost"),
-        port=db_config.get("port", 5432),
-        dbname=db_config.get("dbname", "agi_memory"),
+        port=db_config.get("port", 43815),
+        dbname=db_config.get("dbname", "hexis_memory"),
         user=db_config.get("user", "postgres"),
         password=db_config.get("password", "password"),
     )

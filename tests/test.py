@@ -32,10 +32,10 @@ def get_test_identifier(test_name: str) -> str:
 
 def _db_dsn() -> str:
     db_host = os.getenv("POSTGRES_HOST", "localhost")
-    db_port = os.getenv("POSTGRES_PORT", "5432")
-    db_name = os.getenv("POSTGRES_DB", "agi_db")
-    db_user = os.getenv("POSTGRES_USER", "agi_user")
-    db_password = os.getenv("POSTGRES_PASSWORD", "agi_password")
+    db_port = os.getenv("POSTGRES_PORT", "43815")
+    db_name = os.getenv("POSTGRES_DB", "hexis_memory")
+    db_user = os.getenv("POSTGRES_USER", "hexis_user")
+    db_password = os.getenv("POSTGRES_PASSWORD", "hexis_password")
     return f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
 
 @pytest.fixture(scope="session", autouse=True)
@@ -86,7 +86,7 @@ async def configure_agent_for_tests(db_pool):
     Individual tests can override by deleting the config row in a transaction.
     """
     async with db_pool.acquire() as conn:
-        # Minimal config so CLI `agi config validate` passes in subprocess smoke tests.
+        # Minimal config so CLI `hexis config validate` passes in subprocess smoke tests.
         await conn.execute("SELECT set_config('agent.is_configured', 'true'::jsonb)")
         await conn.execute("SELECT set_config('agent.objectives', $1::jsonb)", json.dumps(["test objective"]))
         await conn.execute(
@@ -103,7 +103,7 @@ async def configure_agent_for_tests(db_pool):
 @pytest.fixture(scope="session", autouse=True)
 async def apply_repo_migrations(db_pool):
     """
-    Apply all SQL migrations once per test session.
+    Apply any optional SQL patches from migrations/ once per test session.
 
     The DB in Docker may persist across runs; this keeps core functions
     and tables up to date without requiring a full volume reset.
@@ -1654,7 +1654,7 @@ async def test_identity_core_clusters(db_pool):
 async def test_assign_memory_to_clusters_function(db_pool):
     """Test the assign_memory_to_clusters function
     
-    Note: This test requires the updated schema.sql to be applied to the database.
+    Note: This test requires the updated db/schema.sql to be applied to the database.
     The assign_memory_to_clusters function was updated to use 
     'WHERE centroid_embedding IS NOT NULL' instead of 'WHERE status = 'active''
     """
@@ -3468,6 +3468,15 @@ async def test_embedding_cache_functionality(db_pool):
 async def test_embedding_error_handling(db_pool):
     """Test error handling for embedding operations"""
     async with db_pool.acquire() as conn:
+        original_url = await conn.fetchval(
+            "SELECT value FROM embedding_config WHERE key = 'service_url'"
+        )
+        original_retry_seconds, original_retry_interval_seconds = await _set_embedding_retry_config(
+            conn,
+            retry_seconds=1,
+            retry_interval_seconds=0.1,
+        )
+
         # Test with invalid service URL
         await conn.execute("""
             UPDATE embedding_config 
@@ -3484,12 +3493,16 @@ async def test_embedding_error_handling(db_pool):
         except Exception as e:
             assert "Failed to get embedding" in str(e), "Should have proper error message"
         
-        # Restore valid URL
-        await conn.execute("""
-            UPDATE embedding_config 
-            SET value = 'http://embeddings:80/embed'
-            WHERE key = 'service_url'
-        """)
+        # Restore valid URL and retry settings
+        await conn.execute(
+            "UPDATE embedding_config SET value = $1 WHERE key = 'service_url'",
+            original_url,
+        )
+        await _restore_embedding_retry_config(
+            conn,
+            original_retry_seconds,
+            original_retry_interval_seconds,
+        )
 
 
 async def test_memory_cluster_with_embeddings(db_pool):
@@ -4137,7 +4150,7 @@ async def test_schema_migration_compatibility(db_pool):
         # Record current schema version
         await conn.execute("""
             INSERT INTO schema_version (version, description)
-            VALUES (1, 'Initial AGI Memory System schema')
+            VALUES (1, 'Initial Hexis Memory System schema')
             ON CONFLICT (version) DO NOTHING
         """)
         
@@ -4317,16 +4330,16 @@ async def test_monitoring_and_alerting_metrics(db_pool):
         assert resource_metrics is not None, "Should have resource metrics"
 
 
-async def test_multi_agi_considerations(db_pool):
-    """Test considerations for multi-AGI support (current limitations)"""
+async def test_multi_hexis_considerations(db_pool):
+    """Test considerations for multi-Hexis support (current limitations)"""
     async with db_pool.acquire() as conn:
         # Clean up any existing test data first
         await conn.execute("""
-            DELETE FROM memories WHERE content LIKE '%AGI-% believes X is%'
+            DELETE FROM memories WHERE content LIKE '%Hexis-% believes X is%'
         """)
         
-        # Test 1: Identify single-AGI assumptions in current schema
-        single_agi_tables = await conn.fetch("""
+        # Test 1: Identify single-Hexis assumptions in current schema
+        single_hexis_tables = await conn.fetch("""
             SELECT 
                 table_name,
                 CASE
@@ -4340,31 +4353,31 @@ async def test_multi_agi_considerations(db_pool):
             ORDER BY table_name
         """)
         
-        singleton_tables = [t for t in single_agi_tables if t['table_category'] == 'singleton_table']
+        singleton_tables = [t for t in single_hexis_tables if t['table_category'] == 'singleton_table']
         assert len(singleton_tables) > 0, "Should identify singleton tables"
         
-        # Test 2: Simulate multi-AGI data isolation requirements
-        # This test demonstrates what would need to change for multi-AGI support
+        # Test 2: Simulate multi-Hexis data isolation requirements
+        # This test demonstrates what would need to change for multi-Hexis support
         
-        # Check if any tables have AGI instance identification
-        agi_id_columns = await conn.fetch("""
+        # Check if any tables have Hexis instance identification
+        hexis_id_columns = await conn.fetch("""
             SELECT 
                 table_name,
                 column_name
             FROM information_schema.columns
             WHERE table_schema = 'public'
-            AND column_name LIKE '%agi%'
+            AND column_name LIKE '%hexis%'
             ORDER BY table_name, column_name
         """)
         
-        # Current schema should have no AGI ID columns (single-AGI design)
-        assert len(agi_id_columns) == 0, "Current schema should not have AGI ID columns"
+        # Current schema should have no Hexis ID columns (single-Hexis design)
+        assert len(hexis_id_columns) == 0, "Current schema should not have Hexis ID columns"
         
         # Test 3: Demonstrate memory isolation challenges
-        # Create test scenario showing how memories could conflict between AGIs
+        # Create test scenario showing how memories could conflict between Hexis instances
         
-        # AGI 1 memories
-        agi1_memory = await conn.fetchval("""
+        # Hexis 1 memories
+        hexis1_memory = await conn.fetchval("""
             INSERT INTO memories (
                 type,
                 content,
@@ -4372,14 +4385,14 @@ async def test_multi_agi_considerations(db_pool):
                 importance
             ) VALUES (
                 'semantic'::memory_type,
-                'AGI-1 believes X is true',
+                'Hexis-1 believes X is true',
                 array_fill(0.8, ARRAY[embedding_dimension()])::vector,
                 0.9
             ) RETURNING id
         """)
         
-        # AGI 2 memories (conflicting belief)
-        agi2_memory = await conn.fetchval("""
+        # Hexis 2 memories (conflicting belief)
+        hexis2_memory = await conn.fetchval("""
             INSERT INTO memories (
                 type,
                 content,
@@ -4387,7 +4400,7 @@ async def test_multi_agi_considerations(db_pool):
                 importance
             ) VALUES (
                 'semantic'::memory_type,
-                'AGI-2 believes X is false',
+                'Hexis-2 believes X is false',
                 array_fill(0.8, ARRAY[embedding_dimension()])::vector,
                 0.9
             ) RETURNING id
@@ -4401,14 +4414,14 @@ async def test_multi_agi_considerations(db_pool):
                 importance,
                 'conflict_detected' as issue_type
             FROM memories
-            WHERE content LIKE '%AGI-% believes X is%'
+            WHERE content LIKE '%Hexis-% believes X is%'
             ORDER BY content
         """)
         
-        assert len(conflicting_memories) == 2, "Should find conflicting AGI memories"
+        assert len(conflicting_memories) == 2, "Should find conflicting Hexis memories"
         
         # Test 4: Demonstrate worldview conflicts
-        # In single-AGI system, only one worldview can exist
+        # In single-Hexis system, only one worldview can exist
         worldview_count = await conn.fetchval("""
             SELECT COUNT(*) FROM worldview_primitives
         """)
@@ -4418,27 +4431,27 @@ async def test_multi_agi_considerations(db_pool):
             SELECT COUNT(*) FROM identity_aspects
         """)
 
-        # Test 6: Show what would be needed for multi-AGI support
-        multi_agi_requirements = {
+        # Test 6: Show what would be needed for multi-Hexis support
+        multi_hexis_requirements = {
             'schema_changes_needed': [
-                'Add agi_instance_id to all memory tables',
-                'Add agi_instance_id to worldview_primitives',
-                'Add agi_instance_id to identity_aspects',
+                'Add hexis_instance_id to all memory tables',
+                'Add hexis_instance_id to worldview_primitives',
+                'Add hexis_instance_id to identity_aspects',
                 'Add row-level security policies',
-                'Modify all views to filter by AGI instance',
-                'Update all functions to include AGI context'
+                'Modify all views to filter by Hexis instance',
+                'Update all functions to include Hexis context'
             ],
             'isolation_challenges': [
-                'Memory similarity search across AGI boundaries',
-                'Cluster centroid calculations per AGI',
-                'Graph relationships between AGI instances',
+                'Memory similarity search across Hexis boundaries',
+                'Cluster centroid calculations per Hexis',
+                'Graph relationships between Hexis instances',
                 'Shared vs private memory spaces',
-                'Cross-AGI learning and knowledge transfer'
+                'Cross-Hexis learning and knowledge transfer'
             ]
         }
         
-        # This test documents the current single-AGI limitations
-        assert len(multi_agi_requirements['schema_changes_needed']) > 0, "Multi-AGI support requires significant changes"
+        # This test documents the current single-Hexis limitations
+        assert len(multi_hexis_requirements['schema_changes_needed']) > 0, "Multi-Hexis support requires significant changes"
 
 
 # ============================================================================
@@ -6330,6 +6343,11 @@ async def test_get_embedding_http_error_handling(db_pool):
         original_url = await conn.fetchval(
             "SELECT value FROM embedding_config WHERE key = 'service_url'"
         )
+        original_retry_seconds, original_retry_interval_seconds = await _set_embedding_retry_config(
+            conn,
+            retry_seconds=1,
+            retry_interval_seconds=0.1,
+        )
 
         try:
             # Set invalid URL
@@ -6351,6 +6369,11 @@ async def test_get_embedding_http_error_handling(db_pool):
                 "UPDATE embedding_config SET value = $1 WHERE key = 'service_url'",
                 original_url
             )
+            await _restore_embedding_retry_config(
+                conn,
+                original_retry_seconds,
+                original_retry_interval_seconds,
+            )
 
 
 async def test_get_embedding_non_200_response_handling(db_pool):
@@ -6358,6 +6381,11 @@ async def test_get_embedding_non_200_response_handling(db_pool):
     async with db_pool.acquire() as conn:
         original_url = await conn.fetchval(
             "SELECT value FROM embedding_config WHERE key = 'service_url'"
+        )
+        original_retry_seconds, original_retry_interval_seconds = await _set_embedding_retry_config(
+            conn,
+            retry_seconds=1,
+            retry_interval_seconds=0.1,
         )
 
         try:
@@ -6379,6 +6407,11 @@ async def test_get_embedding_non_200_response_handling(db_pool):
             await conn.execute(
                 "UPDATE embedding_config SET value = $1 WHERE key = 'service_url'",
                 original_url
+            )
+            await _restore_embedding_retry_config(
+                conn,
+                original_retry_seconds,
+                original_retry_interval_seconds,
             )
 
 
@@ -7018,9 +7051,9 @@ async def apply_heartbeat_migration(db_pool):
     """
     Legacy fixture retained for older test structure.
 
-    The repo now applies all migrations via the autouse session fixture
-    (`apply_repo_migrations`), so this fixture is intentionally a no-op to
-    avoid overriding newer definitions.
+    The repo now folds patches into db/schema.sql, and any optional
+    migrations/ patches are handled by `apply_repo_migrations`, so this
+    fixture is intentionally a no-op to avoid overriding newer definitions.
     """
     return True
 
@@ -7269,8 +7302,61 @@ def _coerce_json(val):
     return val
 
 
+async def _set_embedding_retry_config(
+    conn,
+    retry_seconds: int,
+    retry_interval_seconds: float,
+):
+    original_retry_seconds = await conn.fetchval(
+        "SELECT value FROM embedding_config WHERE key = 'retry_seconds'"
+    )
+    original_retry_interval_seconds = await conn.fetchval(
+        "SELECT value FROM embedding_config WHERE key = 'retry_interval_seconds'"
+    )
+    await conn.execute(
+        """
+        INSERT INTO embedding_config (key, value)
+        VALUES ('retry_seconds', $1)
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+        """,
+        str(retry_seconds),
+    )
+    await conn.execute(
+        """
+        INSERT INTO embedding_config (key, value)
+        VALUES ('retry_interval_seconds', $1)
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+        """,
+        str(retry_interval_seconds),
+    )
+    return original_retry_seconds, original_retry_interval_seconds
+
+
+async def _restore_embedding_retry_config(
+    conn,
+    original_retry_seconds,
+    original_retry_interval_seconds,
+):
+    if original_retry_seconds is None:
+        await conn.execute("DELETE FROM embedding_config WHERE key = 'retry_seconds'")
+    else:
+        await conn.execute(
+            "UPDATE embedding_config SET value = $1 WHERE key = 'retry_seconds'",
+            original_retry_seconds,
+        )
+    if original_retry_interval_seconds is None:
+        await conn.execute(
+            "DELETE FROM embedding_config WHERE key = 'retry_interval_seconds'"
+        )
+    else:
+        await conn.execute(
+            "UPDATE embedding_config SET value = $1 WHERE key = 'retry_interval_seconds'",
+            original_retry_interval_seconds,
+        )
+
+
 async def test_worker_claim_pending_call_is_concurrency_safe(db_pool, apply_heartbeat_migration):
-    from worker import HeartbeatWorker
+    from apps.workers.worker import HeartbeatWorker
 
     async with db_pool.acquire() as conn:
         # Create two pending calls
@@ -7303,7 +7389,7 @@ async def test_worker_claim_pending_call_is_concurrency_safe(db_pool, apply_hear
 
 
 async def test_worker_fail_call_retries_then_fails(db_pool, apply_heartbeat_migration):
-    from worker import HeartbeatWorker, MAX_RETRIES
+    from apps.workers.worker import HeartbeatWorker, MAX_RETRIES
 
     worker = HeartbeatWorker()
     worker.pool = db_pool
@@ -7341,7 +7427,7 @@ async def test_worker_end_to_end_heartbeat_with_follow_on_calls(db_pool, apply_h
     - Worker processes those calls and applies side-effects (create goals, create semantic memory)
     - Heartbeat completes with an episodic memory + log row
     """
-    from worker import HeartbeatWorker
+    from apps.workers.worker import HeartbeatWorker
 
     class FakeWorker(HeartbeatWorker):
         def __init__(self, docs: list[dict]):
@@ -7856,6 +7942,11 @@ async def test_safe_get_embedding_returns_null_on_failure(db_pool):
         tr = conn.transaction()
         await tr.start()
         try:
+            await _set_embedding_retry_config(
+                conn,
+                retry_seconds=1,
+                retry_interval_seconds=0.1,
+            )
             await conn.execute(
                 "UPDATE embedding_config SET value = 'http://nonexistent-service:9999/embed' WHERE key = 'service_url'"
             )
@@ -8136,12 +8227,12 @@ async def test_recompute_neighborhood_writes_neighbors(db_pool):
 
 
 # -----------------------------------------------------------------------------
-# PYTHON API SURFACE (cognitive_memory_api.py)
+# PYTHON API SURFACE (core/cognitive_memory_api.py)
 # -----------------------------------------------------------------------------
 
 @pytest.fixture(scope="session")
 async def cognitive_memory_client(ensure_embedding_service):
-    from cognitive_memory_api import CognitiveMemory
+    from core.cognitive_memory_api import CognitiveMemory
 
     client = await CognitiveMemory.create(_db_dsn(), min_size=1, max_size=5)
     yield client
@@ -8149,7 +8240,7 @@ async def cognitive_memory_client(ensure_embedding_service):
 
 
 async def test_api_remember_and_recall_by_id(cognitive_memory_client, db_pool):
-    from cognitive_memory_api import MemoryType
+    from core.cognitive_memory_api import MemoryType
 
     test_id = get_test_identifier("api_remember")
     content = f"API semantic memory {test_id}"
@@ -8173,7 +8264,7 @@ async def test_api_remember_and_recall_by_id(cognitive_memory_client, db_pool):
 
 
 async def test_api_semantic_sources_affect_trust(cognitive_memory_client, db_pool):
-    from cognitive_memory_api import MemoryType
+    from core.cognitive_memory_api import MemoryType
 
     test_id = get_test_identifier("api_trust")
     content = f"API claim from twitter {test_id}"
@@ -8205,7 +8296,7 @@ async def test_api_semantic_sources_affect_trust(cognitive_memory_client, db_poo
 
 
 async def test_api_remember_links_concepts_and_find_by_concept(cognitive_memory_client, db_pool):
-    from cognitive_memory_api import MemoryType
+    from core.cognitive_memory_api import MemoryType
 
     test_id = get_test_identifier("api_concepts")
     content = f"API concept memory {test_id}"
@@ -8228,7 +8319,7 @@ async def test_api_remember_links_concepts_and_find_by_concept(cognitive_memory_
 
 
 async def test_api_hydrate_returns_context(cognitive_memory_client, db_pool):
-    from cognitive_memory_api import MemoryType
+    from core.cognitive_memory_api import MemoryType
 
     test_id = get_test_identifier("api_hydrate")
     content = f"Hydrate memory {test_id}"
@@ -8264,7 +8355,7 @@ async def test_api_hold_and_search_working(cognitive_memory_client, db_pool):
 
 
 async def test_api_connect_memories_creates_audit_row(cognitive_memory_client, db_pool):
-    from cognitive_memory_api import MemoryType, RelationshipType
+    from core.cognitive_memory_api import MemoryType, RelationshipType
 
     test_id = get_test_identifier("api_connect")
     a = await cognitive_memory_client.remember(f"Conn A {test_id}", type=MemoryType.SEMANTIC, importance=0.6)
@@ -8293,7 +8384,7 @@ async def test_api_connect_memories_creates_audit_row(cognitive_memory_client, d
 
 
 async def test_api_remember_batch_raw_success_creates_graph_nodes(cognitive_memory_client, db_pool):
-    from cognitive_memory_api import MemoryType
+    from core.cognitive_memory_api import MemoryType
 
     test_id = get_test_identifier("api_batch_raw_ok")
     contents = [f"Batch raw A {test_id}", f"Batch raw B {test_id}"]
@@ -8338,7 +8429,7 @@ async def test_api_remember_batch_raw_success_creates_graph_nodes(cognitive_memo
 
 
 async def test_api_remember_batch_raw_dimension_mismatch_raises(cognitive_memory_client):
-    from cognitive_memory_api import MemoryType
+    from core.cognitive_memory_api import MemoryType
 
     with pytest.raises(ValueError):
         await cognitive_memory_client.remember_batch_raw(["x"], [[0.0]], type=MemoryType.SEMANTIC)
@@ -8351,7 +8442,7 @@ async def test_api_hydrate_batch_returns_many(cognitive_memory_client):
 
 
 async def test_api_context_manager_connect_works(ensure_embedding_service):
-    from cognitive_memory_api import CognitiveMemory
+    from core.cognitive_memory_api import CognitiveMemory
 
     async with CognitiveMemory.connect(_db_dsn(), min_size=1, max_size=3) as mem:
         ctx = await mem.hydrate("test query", include_goals=False)
@@ -8376,7 +8467,7 @@ async def test_api_introspection_methods_return_shapes(cognitive_memory_client):
 
 async def test_api_create_goal_sets_due_at(cognitive_memory_client, db_pool):
     from datetime import datetime, timezone
-    from cognitive_memory_api import GoalPriority, GoalSource
+    from core.cognitive_memory_api import GoalPriority, GoalSource
 
     test_id = get_test_identifier("api_goal_due")
     due_at = datetime.now(timezone.utc)
@@ -8408,7 +8499,7 @@ async def test_api_queue_user_message_creates_outbox(cognitive_memory_client, db
 
 
 async def test_api_ingestion_receipts_roundtrip(cognitive_memory_client):
-    from cognitive_memory_api import MemoryType
+    from core.cognitive_memory_api import MemoryType
 
     test_id = get_test_identifier("api_ingestion_receipt")
     mid = await cognitive_memory_client.remember(f"Receipt memory {test_id}", type=MemoryType.EPISODIC, importance=0.4)
@@ -8430,7 +8521,7 @@ async def test_api_ingestion_receipts_roundtrip(cognitive_memory_client):
 
 
 async def test_api_sync_wrapper_basic(ensure_embedding_service):
-    from cognitive_memory_api import CognitiveMemorySync, MemoryType
+    from core.cognitive_memory_api import CognitiveMemorySync, MemoryType
 
     dsn = _db_dsn()
 
@@ -8453,7 +8544,7 @@ async def test_api_sync_wrapper_basic(ensure_embedding_service):
 # -----------------------------------------------------------------------------
 
 async def test_worker_run_maintenance_cleans_items(db_pool):
-    from worker import MaintenanceWorker
+    from apps.workers.worker import MaintenanceWorker
 
     worker = MaintenanceWorker()
     worker.pool = db_pool  # inject test pool
@@ -8515,7 +8606,7 @@ async def test_worker_run_maintenance_cleans_items(db_pool):
 
 
 async def test_worker_check_and_run_heartbeat_queues_decision_call(db_pool):
-    from worker import HeartbeatWorker
+    from apps.workers.worker import HeartbeatWorker
 
     worker = HeartbeatWorker()
     worker.pool = db_pool
@@ -8930,7 +9021,7 @@ async def test_self_model_helpers_roundtrip(db_pool):
 
 
 async def test_prompt_resources_load_and_compose():
-    from prompt_resources import load_personhood_library, compose_personhood_prompt
+    from core.prompt_resources import load_personhood_library, compose_personhood_prompt
 
     lib = load_personhood_library()
     assert isinstance(lib.raw_markdown, str) and len(lib.raw_markdown) > 100
@@ -8945,7 +9036,7 @@ async def test_prompt_resources_load_and_compose():
 
 
 async def test_worker_heartbeat_system_prompt_includes_personhood_modules():
-    import worker
+    from apps.workers import worker
 
     assert "PERSONHOOD MODULES" in worker.HEARTBEAT_SYSTEM_PROMPT
 
@@ -9100,7 +9191,7 @@ async def test_terminate_agent_wipes_state_and_queues_last_will(db_pool):
             assert float(remaining["trust_level"]) == 1.0
 
             outbox = await conn.fetch("SELECT payload FROM outbox_messages ORDER BY created_at ASC")
-            intents = [r["payload"].get("intent") for r in outbox]
+            intents = [_coerce_json(r["payload"]).get("intent") for r in outbox]
             assert "final_will" in intents
             assert intents.count("farewell") == len(farewells)
 
@@ -9119,7 +9210,7 @@ async def test_terminate_agent_wipes_state_and_queues_last_will(db_pool):
 async def test_cli_status_json_no_docker(db_pool):
     env = os.environ.copy()
     p = subprocess.run(
-        [sys.executable, "-m", "agi_cli", "status", "--json", "--no-docker", "--wait-seconds", "60"],
+        [sys.executable, "-m", "apps.cli.hexis_cli", "status", "--json", "--no-docker", "--wait-seconds", "60"],
         capture_output=True,
         text=True,
         env=env,
@@ -9135,7 +9226,7 @@ async def test_cli_config_show_and_validate(db_pool):
     env = os.environ.copy()
 
     show = subprocess.run(
-        [sys.executable, "-m", "agi_cli", "config", "show", "--wait-seconds", "60"],
+        [sys.executable, "-m", "apps.cli.hexis_cli", "config", "show", "--wait-seconds", "60"],
         capture_output=True,
         text=True,
         env=env,
@@ -9146,7 +9237,7 @@ async def test_cli_config_show_and_validate(db_pool):
     assert "agent.is_configured" in cfg
 
     validate = subprocess.run(
-        [sys.executable, "-m", "agi_cli", "config", "validate", "--wait-seconds", "60"],
+        [sys.executable, "-m", "apps.cli.hexis_cli", "config", "validate", "--wait-seconds", "60"],
         capture_output=True,
         text=True,
         env=env,
@@ -9161,7 +9252,7 @@ async def test_cli_config_validate_fails_when_unconfigured(db_pool):
     try:
         env = os.environ.copy()
         validate = subprocess.run(
-            [sys.executable, "-m", "agi_cli", "config", "validate", "--wait-seconds", "60"],
+            [sys.executable, "-m", "apps.cli.hexis_cli", "config", "validate", "--wait-seconds", "60"],
             capture_output=True,
             text=True,
             env=env,

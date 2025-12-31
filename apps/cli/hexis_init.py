@@ -105,10 +105,10 @@ def _prompt_list(label: str, *, required: bool = False) -> list[str]:
 def _env_db_config() -> DbConfig:
     return DbConfig(
         host=os.getenv("POSTGRES_HOST", "localhost"),
-        port=int(os.getenv("POSTGRES_PORT", "5432")),
-        database=os.getenv("POSTGRES_DB", "agi_db"),
-        user=os.getenv("POSTGRES_USER", "agi_user"),
-        password=os.getenv("POSTGRES_PASSWORD", "agi_password"),
+        port=int(os.getenv("POSTGRES_PORT", "43815")),
+        database=os.getenv("POSTGRES_DB", "hexis_memory"),
+        user=os.getenv("POSTGRES_USER", "hexis_user"),
+        password=os.getenv("POSTGRES_PASSWORD", "hexis_password"),
     )
 
 
@@ -130,7 +130,8 @@ async def _ensure_schema_has_config(conn: asyncpg.Connection) -> None:
     if not ok:
         raise RuntimeError(
             "Database schema is missing `config` table. "
-            "If you just updated `schema.sql`, reset the DB volume and retry: `docker compose down -v && docker compose up -d`."
+            "If you just updated `db/schema.sql`, reset the DB volume and retry: "
+            "`docker compose down -v && docker compose up -d`."
         )
 
 
@@ -164,7 +165,7 @@ async def _run_init(dsn: str, *, wait_seconds: int) -> int:
         default_max_active_goals = int(hb.get("max_active_goals", 3))
         default_maint_interval = int(maint.get("maintenance_interval_seconds", 60)) if maint else 60
 
-        print("AGI init: configure heartbeat + objectives + guardrails.\n")
+        print("Hexis init: configure heartbeat + objectives + guardrails.\n")
 
         heartbeat_interval = _prompt_int(
             "Heartbeat interval (minutes)", default=default_interval, min_value=1
@@ -185,7 +186,7 @@ async def _run_init(dsn: str, *, wait_seconds: int) -> int:
         objectives = _prompt_list("Major objectives", required=True)
         guardrails = _prompt_list("Guardrails / boundaries (plain language)", required=False)
         initial_message = _prompt(
-            "Initial message to the AGI (stored + provided to the heartbeat)",
+            "Initial message to Hexis (stored + provided to the heartbeat)",
             default="",
             required=False,
         )
@@ -222,7 +223,7 @@ async def _run_init(dsn: str, *, wait_seconds: int) -> int:
         )
 
         contact_channels = _prompt_list(
-            "How should the AGI reach you? (e.g. email, sms, telegram, signal) [names only]",
+            "How should Hexis reach you? (e.g. email, sms, telegram, signal) [names only]",
             required=False,
         )
         contact_details: dict[str, str] = {}
@@ -230,14 +231,14 @@ async def _run_init(dsn: str, *, wait_seconds: int) -> int:
             contact_details[ch] = _prompt(f"  {ch} destination (address/handle)", default="", required=False, secret=False)
 
         tools = _prompt_list(
-            "Tools the AGI can use (e.g. email, sms, tweet, web_research) [names only]",
+            "Tools Hexis can use (e.g. email, sms, tweet, web_research) [names only]",
             required=False,
         )
 
         enable_autonomy = _prompt_yes_no("Enable autonomous heartbeats now?", default=True)
         enable_maintenance = _prompt_yes_no("Enable subconscious maintenance now?", default=True)
         enable_self_termination = _prompt_yes_no(
-            "Enable self-termination capability? (allows the AGI to permanently wipe its state; default off)",
+            "Enable self-termination capability? (allows Hexis to permanently wipe its state; default off)",
             default=False,
         )
 
@@ -327,8 +328,11 @@ async def _run_init(dsn: str, *, wait_seconds: int) -> int:
 
         print("\nSaved configuration to Postgres `config` table.")
         print("Next steps:")
-        print("- Start services: `docker compose up -d`")
-        print("- Start workers: `docker compose --profile active up -d` (or `--profile heartbeat` / `--profile maintenance`)")
+        print("- Start services: `docker compose up -d` (or `hexis up`)")
+        print(
+            "- Start workers: `docker compose --profile active up -d` "
+            "(or `hexis start` / `--profile heartbeat` / `--profile maintenance`)"
+        )
         print("- Verify: `SELECT is_agent_configured();`, `SELECT should_run_heartbeat();`, `SELECT should_run_maintenance();`")
         return 0
     finally:
@@ -336,7 +340,7 @@ async def _run_init(dsn: str, *, wait_seconds: int) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="agi init", description="Interactive bootstrap for AGI configuration (stored in Postgres).")
+    p = argparse.ArgumentParser(prog="hexis init", description="Interactive bootstrap for Hexis configuration (stored in Postgres).")
     p.add_argument("--dsn", default=None, help="Postgres DSN; defaults to POSTGRES_* env vars")
     p.add_argument("--wait-seconds", type=int, default=int(os.getenv("POSTGRES_WAIT_SECONDS", "30")))
     return p

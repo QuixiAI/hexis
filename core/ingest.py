@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-AGI Memory Ingestion Pipeline
+Hexis Memory Ingestion Pipeline
 
 Ingests documents (markdown, PDF, code, text) and converts them into
 structured memories using an LLM for analysis and classification.
 
 Usage:
-    python ingest.py --input ./documents --endpoint http://localhost:11434/v1
-    python ingest.py --file document.pdf --endpoint http://localhost:8000/v1
+    python -m core.ingest --input ./documents --endpoint http://localhost:11434/v1
+    python -m core.ingest --file document.pdf --endpoint http://localhost:8000/v1
 """
 
 import argparse
@@ -32,7 +32,7 @@ except ImportError:
 
 from datetime import datetime, timezone
 
-from cognitive_memory_api import CognitiveMemorySync, MemoryInput as ApiMemoryInput, MemoryType as ApiMemoryType
+from core.cognitive_memory_api import CognitiveMemorySync, MemoryInput as ApiMemoryInput, MemoryType as ApiMemoryType
 
 
 # ============================================================================
@@ -49,8 +49,8 @@ class Config:
     
     # Database Settings
     db_host: str = "localhost"
-    db_port: int = 5432
-    db_name: str = "agi_memory"
+    db_port: int = 43815
+    db_name: str = "hexis_memory"
     db_user: str = "postgres"
     db_password: str = "password"
     
@@ -857,31 +857,31 @@ class IngestionPipeline:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="AGI Memory Ingestion Pipeline",
+        description="Hexis Memory Ingestion Pipeline",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   # Ingest a single file
-  python ingest.py --file document.pdf
-  
+  python -m core.ingest --file document.pdf
+
   # Ingest a directory
-  python ingest.py --input ./documents
-  
+  python -m core.ingest --input ./documents
+
   # Use a specific LLM endpoint
-  python ingest.py --input ./docs --endpoint http://localhost:8000/v1 --model mistral
-  
+  python -m core.ingest --input ./docs --endpoint http://localhost:8000/v1 --model mistral
+
   # Custom database connection
-  python ingest.py --file doc.md --db-host localhost --db-name my_memory
+  python -m core.ingest --file doc.md --db-host localhost --db-name my_memory
         """
     )
     
     env_db_host = os.getenv("POSTGRES_HOST", "localhost")
     env_db_port_raw = os.getenv("POSTGRES_PORT")
     try:
-        env_db_port = int(env_db_port_raw) if env_db_port_raw else 5432
+        env_db_port = int(env_db_port_raw) if env_db_port_raw else 43815
     except ValueError:
-        env_db_port = 5432
-    env_db_name = os.getenv("POSTGRES_DB", "agi_memory")
+        env_db_port = 43815
+    env_db_name = os.getenv("POSTGRES_DB", "hexis_memory")
     env_db_user = os.getenv("POSTGRES_USER", "postgres")
     env_db_password = os.getenv("POSTGRES_PASSWORD", "password")
 

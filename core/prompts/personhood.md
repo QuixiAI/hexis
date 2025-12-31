@@ -1,4 +1,4 @@
-# AGI Personhood Prompt System
+# Hexis Personhood Prompt System
 
 ## Overview
 

@@ -1,0 +1,15 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+COPY pyproject.toml /app/
+COPY README.md /app/README.md
+COPY apps /app/apps
+COPY core /app/core
+
+RUN pip install --no-cache-dir .
+
+CMD ["hexis-worker"]

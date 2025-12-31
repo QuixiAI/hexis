@@ -3,8 +3,8 @@ set -euo pipefail
 
 echo "Waiting for database to be ready..."
 
-DB_USER=${POSTGRES_USER:-agi_user}
-DB_NAME=${POSTGRES_DB:-agi_db}
+DB_USER=${POSTGRES_USER:-hexis_user}
+DB_NAME=${POSTGRES_DB:-hexis_memory}
 
 # Run inside the container, so call postgres utilities directly (use the local socket)
 until pg_isready -U "${DB_USER}" -d "${DB_NAME}" > /dev/null 2>&1; do

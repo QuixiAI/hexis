@@ -1,24 +1,26 @@
 services:
   db:
-    build: .  # Points to the Dockerfile above
-    container_name: agi_brain
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hexis_brain
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-agi_memory}
+      POSTGRES_DB: ${POSTGRES_DB:-hexis_memory}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
       # Important for AGE extension
       POSTGRES_HOST_AUTH_METHOD: trust 
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # schema.sql is baked into the image (see Dockerfile) to avoid bind-mount issues on macOS external drives.
+      # db/schema.sql is baked into the image (see Dockerfile) to avoid bind-mount issues on macOS external drives.
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-agi_memory}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-hexis_memory}"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${HEXIS_BIND_ADDRESS:-127.0.0.1}:${POSTGRES_PORT:-43815}:5432"
     # Need to modify search_path for AGE to work seamlessly
     command:
       - postgres
@@ -32,13 +34,13 @@ services:
 
   rabbitmq:
     image: rabbitmq:4-management
-    container_name: agi_rabbitmq
+    container_name: hexis_rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-agi}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-agi_password}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-hexis}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-hexis_password}
     ports:
-      - "${RABBITMQ_PORT:-5672}:5672"
-      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+      - "${HEXIS_BIND_ADDRESS:-127.0.0.1}:${RABBITMQ_PORT:-5672}:5672"
+      - "${HEXIS_BIND_ADDRESS:-127.0.0.1}:${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -53,7 +55,7 @@ services:
 
   embeddings:
     image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.8
-    container_name: agi_embeddings
+    container_name: hexis_embeddings
     platform: linux/amd64
     command: 
       - --model-id
@@ -82,9 +84,9 @@ services:
     profiles: ["active", "heartbeat"]
     build:
       context: .
-      dockerfile: Dockerfile.worker
-    container_name: agi_heartbeat_worker
-    command: ["agi-worker", "--mode", "heartbeat"]
+      dockerfile: ops/Dockerfile.worker
+    container_name: hexis_heartbeat_worker
+    command: ["hexis-worker", "--mode", "heartbeat"]
     depends_on:
       db:
         condition: service_healthy
@@ -102,9 +104,9 @@ services:
     profiles: ["active", "maintenance"]
     build:
       context: .
-      dockerfile: Dockerfile.worker
-    container_name: agi_maintenance_worker
-    command: ["agi-worker", "--mode", "maintenance"]
+      dockerfile: ops/Dockerfile.worker
+    container_name: hexis_maintenance_worker
+    command: ["hexis-worker", "--mode", "maintenance"]
     depends_on:
       db:
         condition: service_healthy
@@ -117,8 +119,8 @@ services:
       EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-768}
       RABBITMQ_ENABLED: "1"
       RABBITMQ_MANAGEMENT_URL: http://rabbitmq:15672
-      RABBITMQ_USER: ${RABBITMQ_DEFAULT_USER:-agi}
-      RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS:-agi_password}
+      RABBITMQ_USER: ${RABBITMQ_DEFAULT_USER:-hexis}
+      RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS:-hexis_password}
     networks:
       - private
       - public

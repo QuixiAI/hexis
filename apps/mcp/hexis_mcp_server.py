@@ -7,7 +7,7 @@ Install with:
   pip install -e .
 
 Run:
-  python -m agi_mcp_server
+  python -m apps.mcp.hexis_mcp_server
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from uuid import UUID
 
 from dotenv import load_dotenv
 
-from cognitive_memory_api import (
+from core.cognitive_memory_api import (
     CognitiveMemory,
     GoalPriority,
     MemoryInput,
@@ -42,10 +42,10 @@ def _print_err(msg: str) -> None:
 
 def _env_dsn() -> str:
     db_host = os.getenv("POSTGRES_HOST", "localhost")
-    db_port = os.getenv("POSTGRES_PORT", "5432")
-    db_name = os.getenv("POSTGRES_DB", "agi_db")
-    db_user = os.getenv("POSTGRES_USER", "agi_user")
-    db_password = os.getenv("POSTGRES_PASSWORD", "agi_password")
+    db_port = os.getenv("POSTGRES_PORT", "43815")
+    db_name = os.getenv("POSTGRES_DB", "hexis_memory")
+    db_user = os.getenv("POSTGRES_USER", "hexis_user")
+    db_password = os.getenv("POSTGRES_PASSWORD", "hexis_password")
     return f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
 
 
@@ -604,7 +604,7 @@ async def _run_server(dsn: str) -> None:
             "MCP dependencies not installed. Install with: pip install -e ."
         ) from e
 
-    server = Server("agi-memory-mcp")
+    server = Server("hexis-mcp")
 
     client = await CognitiveMemory.connect(dsn)
 
@@ -623,12 +623,12 @@ async def _run_server(dsn: str) -> None:
 
     try:
         try:
-            server_version = version("agi-memory")
+            server_version = version("hexis")
         except PackageNotFoundError:  # local dev
             server_version = "dev"
 
         init_opts = InitializationOptions(
-            server_name="agi-memory-mcp",
+            server_name="hexis-mcp",
             server_version=server_version,
             capabilities=ServerCapabilities(tools=ToolsCapability()),
         )
@@ -640,8 +640,12 @@ async def _run_server(dsn: str) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="agi-mcp", description="MCP server exposing CognitiveMemory tools over stdio.")
-    p.add_argument("--dsn", default=os.getenv("AGI_DB_DSN") or None, help="Postgres DSN; defaults to POSTGRES_* env vars")
+    p = argparse.ArgumentParser(prog="hexis-mcp", description="MCP server exposing CognitiveMemory tools over stdio.")
+    p.add_argument(
+        "--dsn",
+        default=os.getenv("HEXIS_DB_DSN") or None,
+        help="Postgres DSN; defaults to POSTGRES_* env vars",
+    )
     return p
 
 

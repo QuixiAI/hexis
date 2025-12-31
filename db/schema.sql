@@ -1,5 +1,5 @@
 -- ============================================================================
--- AGI MEMORY SYSTEM - FINAL SCHEMA
+-- HEXIS MEMORY SYSTEM - FINAL SCHEMA
 -- ============================================================================
 -- Architecture:
 --   - Relational: Core storage, clusters, acceleration, identity
@@ -147,7 +147,7 @@ CREATE TABLE working_memory (
     expiry TIMESTAMPTZ
 );
 
--- Ingestion receipts (idempotency for ingest.py and other batch importers)
+-- Ingestion receipts (idempotency for core/ingest.py and other batch importers)
 CREATE TABLE ingestion_receipts (
     source_file TEXT NOT NULL,
     chunk_index INT NOT NULL,
@@ -2943,7 +2943,7 @@ BEGIN
     IF is_agent_terminated() THEN
         RETURN jsonb_build_object('skipped', true, 'reason', 'terminated');
     END IF;
-    got_lock := pg_try_advisory_lock(hashtext('agi_subconscious_maintenance'));
+    got_lock := pg_try_advisory_lock(hashtext('hexis_subconscious_maintenance'));
     IF NOT got_lock THEN
         RETURN jsonb_build_object('skipped', true, 'reason', 'locked');
     END IF;
@@ -2978,7 +2978,7 @@ BEGIN
         updated_at = CURRENT_TIMESTAMP
     WHERE id = 1;
 
-    PERFORM pg_advisory_unlock(hashtext('agi_subconscious_maintenance'));
+    PERFORM pg_advisory_unlock(hashtext('hexis_subconscious_maintenance'));
 
     RETURN jsonb_build_object(
         'success', true,
@@ -2989,7 +2989,7 @@ BEGIN
     );
 EXCEPTION
     WHEN OTHERS THEN
-        PERFORM pg_advisory_unlock(hashtext('agi_subconscious_maintenance'));
+        PERFORM pg_advisory_unlock(hashtext('hexis_subconscious_maintenance'));
         RAISE;
 END;
 $$ LANGUAGE plpgsql;
@@ -4024,7 +4024,7 @@ COMMENT ON FUNCTION complete_heartbeat IS 'Finalize heartbeat: create episodic m
 COMMENT ON FUNCTION gather_turn_context IS 'Gather full context for LLM decision: environment, goals, memories, identity, worldview, energy.';
 
 -- ============================================================================
--- MERGED MIGRATIONS (migrations/*.sql)
+-- MERGED PATCHES (formerly migrations/*.sql)
 -- ============================================================================
 
 -- ============================================================================
