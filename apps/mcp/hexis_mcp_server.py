@@ -606,22 +606,21 @@ async def _run_server(dsn: str) -> None:
 
     server = Server("hexis-mcp")
 
-    client = await CognitiveMemory.connect(dsn)
+    async with CognitiveMemory.connect(dsn) as client:
 
-    @server.list_tools()
-    async def list_tools():
-        return _tools()
+        @server.list_tools()
+        async def list_tools():
+            return _tools()
 
-    @server.call_tool()
-    async def call_tool(name: str, arguments: dict[str, Any]):
-        try:
-            result = await _dispatch_tool(client, name, arguments or {})
-            text = json.dumps(_jsonable(result), indent=2, sort_keys=True)
-        except Exception as exc:
-            text = f"Error: {exc}"
-        return [TextContent(type="text", text=text)]
+        @server.call_tool()
+        async def call_tool(name: str, arguments: dict[str, Any]):
+            try:
+                result = await _dispatch_tool(client, name, arguments or {})
+                text = json.dumps(_jsonable(result), indent=2, sort_keys=True)
+            except Exception as exc:
+                text = f"Error: {exc}"
+            return [TextContent(type="text", text=text)]
 
-    try:
         try:
             server_version = version("hexis")
         except PackageNotFoundError:  # local dev
@@ -635,8 +634,6 @@ async def _run_server(dsn: str) -> None:
 
         async with stdio_server() as (read_stream, write_stream):
             await server.run(read_stream, write_stream, init_opts)
-    finally:
-        await client.close()
 
 
 def build_parser() -> argparse.ArgumentParser:
