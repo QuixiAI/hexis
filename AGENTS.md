@@ -1,4 +1,6 @@
-# Repository Guidelines
+# Development Guidelines
+
+This file provides guidance for contributors working on the AGI Memory System.
 
 ## Project Structure & Module Organization
 
