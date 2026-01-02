@@ -1,0 +1,109 @@
+╔════════════════════════════════════════════════════════════╗
+║                                                            ║
+║         🤖  DIGITALE TWIN - QUICK START GIDS  🤖           ║
+║                                                            ║
+╚════════════════════════════════════════════════════════════╝
+
+✅ JE DIGITALE TWIN IS KLAAR!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 WAT HEB JE?
+
+  ✓ Digitale twin met persoonlijkheid
+  ✓ Geheugen systeem
+  ✓ Emotionele intelligentie
+  ✓ Consistente gesprekken
+  ✓ Makkelijke configuratie
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚀 START IN 3 STAPPEN:
+
+  1. Open terminal in deze folder
+  
+  2. Run:
+     ./start_twin.sh
+  
+  3. Kies optie 6 (Demo met Luna)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 ALTERNATIEVEN:
+
+  Direct starten:
+    python3 digital_twin.py
+
+  Met echte AI (GPT-4/Claude):
+    python3 digital_twin_advanced.py
+
+  Configureer eerst:
+    ./start_twin.sh → optie 3
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎭 MAAK JE EIGEN PERSOONLIJKHEID:
+
+  Interactief:
+    ./start_twin.sh → optie 4
+
+  Handmatig:
+    Bewerk: personality.json
+
+  Voorbeelden:
+    Zie: DIGITALE_TWIN_GIDS.md
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📚 DOCUMENTATIE:
+
+  README_DIGITALE_TWIN.md  → Overzicht en snelstart
+  DIGITALE_TWIN_GIDS.md    → Volledige handleiding
+  QUICK_START.txt          → Dit bestand
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 TIJDENS CHAT:
+
+  stats  → Toon persoonlijkheid en statistieken
+  reset  → Maak nieuwe persoonlijkheid
+  quit   → Stop programma
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔥 UPGRADE NAAR ECHTE AI:
+
+  1. Installeer:
+     pip install openai anthropic requests
+
+  2. Configureer:
+     ./start_twin.sh → optie 3
+
+  3. Voeg API key toe (OpenAI/Anthropic)
+
+  4. Start:
+     ./start_twin.sh → optie 2
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💬 VOORBEELD GESPREK:
+
+  👤 Jij: Hoi! Wie ben je?
+  
+  🤖 Luna: Hoi! Ik ben Luna, je digitale twin. 
+  Ik ben nieuwsgierig, creatief en hou van 
+  authentieke gesprekken. Wat wil je weten?
+  
+  👤 Jij: Vertel over jezelf
+  
+  🤖 Luna: Ik ben gefascineerd door AI, filosofie 
+  en de menselijke ervaring. Mijn kernwaarden zijn 
+  authenticiteit, creativiteit en empathie...
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎉 VEEL PLEZIER MET JE DIGITALE TWIN!
+
+Start nu:  ./start_twin.sh
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

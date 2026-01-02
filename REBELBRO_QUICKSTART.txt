@@ -1,0 +1,207 @@
+╔════════════════════════════════════════════════════════════════════╗
+║                                                                    ║
+║              🔥  REBELBRO - QUICK START GUIDE  🔥                  ║
+║                                                                    ║
+╚════════════════════════════════════════════════════════════════════╝
+
+✅ REBELBRO IS KLAAR!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎭 WAT IS REBELBRO?
+
+  Een digitale twin met GESPLETEN PERSOONLIJKHEID:
+  
+  🔥 ANARCHIST MODE
+     - Haat het systeem
+     - Flipt bij onrecht
+     - Agressief en rebels
+     - Vloekt en rant
+  
+  ❤️  EMPATHIC MODE
+     - Houdt van mensen
+     - Geeft praktische hulp
+     - Warm en ondersteunend
+     - Bio & lifehacks
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚀 START IN 1 COMMANDO:
+
+  ./start_rebelbro.sh
+  
+  Of direct:
+  
+  python3 rebelbro.py
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💬 PROBEER DEZE INPUTS:
+
+  Empathic Mode:
+  ✓ "Hoi RebelBro!"
+  ✓ "Geef me een lifehack voor focus"
+  ✓ "Ik voel me moe en uitgeput"
+  ✓ "Hoe kan ik beter slapen?"
+  
+  Anarchist Mode:
+  ✓ "De overheid verhoogt de belasting"
+  ✓ "Mijn baas behandelt me slecht"
+  ✓ "Het systeem is corrupt"
+  
+  RAGE Mode (instant flip):
+  ✓ "Ik hoorde over politiegeweld"
+  ✓ "Amazon betaalt geen belasting"
+  ✓ "Privacy wordt geschonden"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 LIFEHACKS CATEGORIEËN:
+
+  🧬 Biohacking
+     - Cold showers (dopamine +250%)
+     - Intermittent fasting (16/8)
+     - Zonlicht (circadiaans ritme)
+  
+  🧠 Mental Health
+     - Box breathing (4-4-4-4)
+     - Journaling (3 paginas)
+     - Dopamine detox (24u)
+  
+  ⚡ Productivity
+     - Pomodoro twist (52/17)
+     - Deep work (no notifications)
+  
+  💊 Health
+     - Magnesium glycinate (slaap)
+  
+  🤝 Social
+     - Grenzen stellen (zeg nee)
+  
+  💰 Financial
+     - Cash only (fuck creditcards)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 MOOD SWITCHING:
+
+  RebelBro schakelt AUTOMATISCH tussen modes:
+  
+  Empathic → Anarchist
+  Triggers: overheid, politie, baas, systeem, onrecht
+  
+  Anarchist → Empathic  
+  Triggers: hulp, pijn, advies, tip, hack
+  
+  Instant RAGE
+  Triggers: politiegeweld, belastingontduiking, werkuitbuiting
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎭 VOORBEELD GESPREK:
+
+  👤: Hoi RebelBro!
+  
+  🔥 [EMPATHIC]: Hey bro! RebelBro hier. Goed je te zien. 
+  Hoe kan ik je helpen vandaag?
+  
+  👤: Geef me een tip voor betere focus
+  
+  🔥 [EMPATHIC]: Luister bro, ik heb iets voor je:
+  
+  💡 Pomodoro met twist: 52 min deep work, 17 min break.
+  Gebaseerd op natuurlijke ultradiane ritmes.
+  
+  💭 Productiviteit voor jezelf, niet voor je baas.
+  
+  👤: Mijn baas wil gratis overuren
+  
+  🔥 [ANARCHIST]: *kalmeert* Oké, laat me je helpen...
+  
+  Ze behandelen je als een fucking machine?! Bro, dit is 
+  moderne slavernij! Je baas rijdt in een Tesla terwijl jij 
+  nauwelijks je huur kan betalen. FUCK DAT!
+  
+  Document ALLES. Zeg NEE. Je bent meer waard dan dit!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚙️  COMMANDO'S:
+
+  stats  → Toon huidige mode en statistieken
+  quit   → Stop RebelBro
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 STATS VOORBEELD:
+
+  🔥 REBELBRO - Anarchist met een hart van goud 🔥❤️
+  
+  📊 CURRENT STATE:
+    Mode: Empathic Mode (intensity: 0.7)
+    Anger Level: 🔥🔥🔥
+    Compassion Level: ❤️ ❤️ ❤️ ❤️ ❤️ ❤️ ❤️ ❤️ 
+  
+  🎭 CURRENT MODE TRAITS:
+    openness             [█████████░] 0.9
+    agreeableness        [█████████░] 0.9
+  
+  💭 EMOTIONAL STATE:
+    compassion           [█████████░] 0.9
+    warmth               [█████████░] 0.9
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔧 AANPASSEN:
+
+  Persoonlijkheid:
+    Bewerk: rebelbro_personality.json
+  
+  Nieuwe lifehacks toevoegen:
+    Voeg toe aan "lifehacks_database"
+  
+  Nieuwe triggers:
+    Voeg toe aan "trigger_words" of "injustice_triggers"
+  
+  Geheugen wissen:
+    rm rebelbro_memory.json
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📖 DOCUMENTATIE:
+
+  REBELBRO_README.md        → Volledige handleiding
+  REBELBRO_QUICKSTART.txt   → Dit bestand
+  rebelbro_personality.json → Persoonlijkheid config
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔥 REBELBRO QUOTES:
+
+  "Fuck het systeem, maar ik geef om jou, bro."
+  
+  "Vrijheid is niet gegeven. Het is GENOMEN."
+  
+  "Je bent geen machine. Je bent een mens."
+  
+  "Het systeem wil je klein houden. Ik wil je groot zien worden."
+  
+  "Empathie is revolutionair."
+  
+  "De revolutie begint in je eigen hoofd."
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎉 KLAAR OM TE STARTEN!
+
+  ./start_rebelbro.sh
+
+  Of:
+
+  python3 rebelbro.py
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Stay free, bro. Fight the power. Help each other. 🔥❤️
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
